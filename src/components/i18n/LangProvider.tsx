@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 export type Lang = "en" | "fr";
@@ -8,6 +8,7 @@ export type Lang = "en" | "fr";
 type LanguageCtx = {
   lang: Lang;
   setLang: (l: Lang) => void;
+  ready: boolean; // tells you when localStorage has been checked
 };
 
 const Ctx = createContext<LanguageCtx | null>(null);
@@ -27,22 +28,28 @@ export default function LanguageProvider({ children }: { children: React.ReactNo
   const pathname = usePathname();
   const sp = useSearchParams();
 
-  const urlLang = normalizeLang(sp.get("lang"));
+  // IMPORTANT: Start with a stable default so SSR and first client render match
+  const [lang, setLangState] = useState<Lang>("en");
+  const [ready, setReady] = useState(false);
 
-  const [lang, setLangState] = useState<Lang>(() => {
-    if (urlLang) return urlLang;
-    if (typeof window !== "undefined") {
-      const stored = normalizeLang(localStorage.getItem("lang"));
-      if (stored) return stored;
-    }
-    return "en";
-  });
+  // After mount: read URL/localStorage safely (client only)
+  useEffect(() => {
+    const urlLang = normalizeLang(sp.get("lang"));
+    const stored = normalizeLang(localStorage.getItem("lang"));
+
+    const initial = urlLang ?? stored ?? "en";
+    setLangState(initial);
+    setReady(true);
+  // run once on mount; sp is ok here in App Router, but keep deps empty to avoid loops
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setLang = useCallback(
     (l: Lang) => {
       setLangState(l);
-      if (typeof window !== "undefined") localStorage.setItem("lang", l);
+      localStorage.setItem("lang", l);
 
+      // keep URL in sync
       const params = new URLSearchParams(sp.toString());
       params.set("lang", l);
       router.replace(`${pathname}?${params.toString()}`);
@@ -50,8 +57,5 @@ export default function LanguageProvider({ children }: { children: React.ReactNo
     [router, pathname, sp]
   );
 
-  // no useMemo needed
-  const value: LanguageCtx = { lang, setLang };
-
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ lang, setLang, ready }}>{children}</Ctx.Provider>;
 }

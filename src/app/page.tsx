@@ -1,5 +1,5 @@
-import RoleSelection from "@/components/RoleSelection/RoleSelection";
+import SplashScreen from "@/components/Splash/SplashScreen";
 
 export default function Home() {
-  return <RoleSelection />;
+  return <SplashScreen />;
 }

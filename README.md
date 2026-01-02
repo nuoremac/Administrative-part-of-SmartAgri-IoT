@@ -1,145 +1,222 @@
-# Smart Agro 
-
-Smart Agro is a web application built with **Next.js** to help farmers manage agricultural data in a simple and modern way.
-The project is designed to be multilingual (English / French) and scalable for future IoT integrations.
 
 ---
 
-## Tech Stack
+# 🌱 Smart Agro — Intelligent Agriculture Web Platform
 
-* **Next.js 14+** (App Router)
+Smart Agro is a modern web application designed to support **smart agriculture management** through a clean administrative dashboard.
+The platform focuses on **parcels, sensors, users, and system monitoring**, with multilingual support and a scalable architecture ready for real IoT data.
+
+This project is currently built with **mock data** to validate UX, architecture, and workflows before backend and hardware integration.
+
+---
+
+## 🚀 Tech Stack
+
+* **Next.js 16 (App Router)**
+* **React 19**
 * **TypeScript**
-* **Tailwind CSS**
-* **React Context** (for global language management)
+* **Tailwind CSS v4**
+* **Recharts** (data visualization)
+* **LocalStorage (mock persistence)**
+* **useSyncExternalStore** (hydration-safe global state)
 
 ---
 
-## Project Setup
+## 🌍 Internationalization (i18n)
 
-```bash
-npx create-next-app@latest smart-agro \
-  --ts --eslint --tailwind --app --src-dir --import-alias "@/*"
+The application supports **English 🇬🇧 and French 🇫🇷** across **all pages**, including:
 
+* Login
+* Dashboard
+* Parcels
+* Sensors
+* Users
+* Modals, buttons, toasts, and table headers
+
+### Key points
+
+* One **global language provider**
+* Language stored in `localStorage`
+* No hydration mismatch
+* `useT()` helper for translations
+* Missing translations are logged (dev-friendly)
+
+---
+
+## 🔐 Authentication (Mocked)
+
+* **Administrator login page**
+* Email + security code
+* Password visibility toggle
+* “Forgot code” message
+* Invalid credentials handling
+* Language selector available on login screen
+* Session stored locally (mock)
+
+> ⚠️ Authentication is mocked for now.
+> The structure is ready for real backend integration.
+
+---
+
+## 📊 Admin Dashboard
+
+The admin dashboard provides a **system overview**, inspired by professional agri-tech platforms.
+
+### Features
+
+* KPI cards (users, parcels, sensors, etc.)
+* Alerts with severity levels
+* Sensor trends
+* Dark / light mode (GitHub-style)
+* Global search bar
+* Responsive layout (desktop + mobile)
+
+---
+
+## 🌾 Parcels Management
+
+### Parcels List
+
+* Pagination (10 per page)
+* Sorting (ID, owner, area, sensors)
+* Global search integration
+* “Consulter” button → parcel detail page
+* Delete with **undo toast**
+
+### Parcel Details
+
+* Parcel information card
+* Soil moisture line chart (24h / 7d)
+* Associated sensors table
+* Relative timestamps (“il y a 2h”)
+* **Edit parcel modal**
+
+  * Name
+  * Owner
+  * Area (m²)
+  * Number of sensors
+* Instant UI update + toast confirmation
+* Hydration-safe rendering
+
+---
+
+## 📡 Sensors Management
+
+### Sensors List
+
+Columns:
+
+* Sensor ID
+* Sensor name
+* Status (OK / Warning / Offline)
+* Last measurement
+* Associated parcels
+* Actions
+
+Features:
+
+* Pagination
+* Sorting
+* Global search
+* Status badges
+* Delete + undo toast
+* “Consulter” → sensor detail page
+
+### Sensor Details
+
+* Sensor information
+* Status badge
+* Last measurement + timestamp
+* **List of associated parcels**
+* “Consulter” button to navigate to parcel details
+
+---
+
+## 👥 Users (Admin)
+
+* Users list with search, pagination, and sorting
+* Add / edit user modal
+* Mock CRUD operations
+* Toast notifications
+* Global search integration
+* Ready for role-based permissions
+
+---
+
+## 🧠 Architecture Decisions
+
+### Why `useSyncExternalStore`?
+
+* Prevents hydration mismatches
+* Safe for SSR + client state
+* Avoids `useEffect` state loops
+* Recommended for shared external state (React 18+)
+
+### Why mock data?
+
+* Validate UX and flows early
+* Enable frontend-first development
+* Easy replacement with API later
+
+---
+
+## 📁 Project Structure (Simplified)
+
+```txt
+src/
+ ├─ app/
+ │   └─ admin/
+ │       ├─ dashboard/
+ │       ├─ parcels/
+ │       │   └─ [id]/
+ │       ├─ sensors/
+ │       │   └─ [id]/
+ │       └─ users/
+ ├─ components/
+ │   ├─ admin/
+ │   ├─ i18n/
+ │   ├─ theme/
+ │   └─ ui/
+ ├─ lib/
+ │   ├─ mockParcels.ts
+ │   ├─ mockSensors.ts
+ │   └─ mockUsers.ts
+```
+
+---
+
+## 🧪 Current Limitations
+
+* No real backend yet
+* No real IoT data
+* Authentication is mocked
+* No role separation beyond admin
+
+These are **intentional** and planned for future iterations.
+
+---
+## Project launch
+```Bash
 cd smart-agro
 npm run dev
 ```
+---
 
-The app runs on:
-👉 `http://localhost:3000`
+## 🔮 Next Steps
+
+* Backend API 
+* Real sensor ingestion (LoRaWAN / MQTT)
+* Role-based access control
+* Export & analytics
+* Alerts automation
 
 ---
 
-## What is already implemented
+## 👨‍💻 Author
 
-### 1. Landing page (role selection)
-
-* First page allows the user to choose between:
-
-  * **Administrator**
-  * **Farmer**
-* Clean UI with background image
-* Real project logo (image-based, not SVG)
-* Logo fills its container and is fully rounded
-* Buttons redirect to the login page with the selected role
-
----
-
-### 2. Language management (English / French)
-
-* A **language dropdown** on the landing page
-* Supported languages:
-
-  * 🇬🇧 English
-  * 🇫🇷 Français
-* Selected language:
-
-  * Updates all texts instantly
-  * Is stored in `localStorage`
-  * Persists across page navigation
-  * Is synchronized with the URL (`?lang=en` / `?lang=fr`)
-
----
-
-### 3. Global i18n system (no external library)
-
-* Centralized translations in one file
-* Custom hook `useT()` for translations
-
-Example usage:
-
-```ts
-const { t } = useT();
-
-<h1>{t("appName")}</h1>
-```
-
-* Missing translations show a warning in the console
-* Easy to extend for new pages and features
-
----
-
-### 4. LanguageProvider (global state)
-
-* React Context used to manage the language
-* Wrapped around the entire app in `layout.tsx`
-* No render loops or React warnings
-* Stable with Next.js Fast Refresh
-
----
-
-### 5. Routing structure (in progress)
-
-* `/` → Landing / role selection
-* `/login` → Login page (placeholder for now)
-* Role is passed via URL (`?role=admin` or `?role=farmer`)
-
----
-
-## Folder structure (current)
-
-```
-src/
- ├─ app/
- │   ├─ layout.tsx
- │   ├─ page.tsx
- │   └─ login/
- │       └─ page.tsx
- ├─ components/
- │   ├─ RoleSelection/
- │   │   └─ RoleSelection.tsx
- │   └─ i18n/
- │       ├─ LanguageProvider.tsx
- │       ├─ translations.ts
- │       └─ useT.ts
- └─ public/
-     └─ images/
-         ├─ logo.png
-         └─ landing-bg.jpg
-```
-
----
-
-## Next steps
-
-* Build the **Login page UI** (admin / farmer)
-* Create **Farmer layout**:
-
-  * Navbar (Dashboard, Terrains, Parcelles, Capteurs, Profil, About)
-  * Search bar
-  * Footer
-* Create **Admin layout**
-* Connect to real sensor / IoT data (later phase)
-
----
-
-## Notes
-
-This project is intentionally built **step by step**, focusing on:
-
-* clean architecture
-* readability
-* scalability
-* real-world practices (not just demo code)
+**Smart Agro**
+Intelligent Agriculture Platform
+Designed & developed for scalable agri-tech systems.
 
 ---
 
