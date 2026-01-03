@@ -17,7 +17,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { query, setQuery, clear } = useAdminSearch();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme , mounted} = useTheme();
 
   
 
@@ -136,6 +136,17 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-3 py-2
                    dark:border-gray-800 dark:bg-[#0d1117]">
              
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="shrink-0 rounded-sm border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
+                          dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-200 dark:hover:bg-[#0d1117]"
+                aria-label="Toggle theme"
+                suppressHydrationWarning
+                title={mounted && theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              >
+                <span suppressHydrationWarning>{mounted && theme === "dark" ? "☀️" : "🌙"}</span>
+              </button>
 
               <button
                 onClick={() => setSidebarOpen(true)}
