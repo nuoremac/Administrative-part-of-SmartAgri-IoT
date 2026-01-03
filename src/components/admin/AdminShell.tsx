@@ -102,7 +102,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   );
 
   return (
-    <div className="min-h-screen bg-[#dff7df] dark:bg-red-600">
+    <div className="min-h-screen bg-[#dff7df] dark:bg-[#0d1117]">
         {/* <div className="flex min-h-screen"> */}
         <div className="flex min-h-screen w-full">
           {/* Desktop sidebar */}
@@ -187,7 +187,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search..."
                     className="w-full min-w-0 rounded-sm border border-gray-200 bg-white px-2 py-1 text-sm outline-none focus:border-green-500
-                              dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+                              dark:border-gray-700 dark:bg-gray-900 dark:text-gray-900 dark:placeholder:text-gray-500"
                   />
 
                   {query ? (
@@ -195,7 +195,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                       type="button"
                       onClick={clear}
                       className="shrink-0 rounded-sm border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
-                                dark:border-gray-700 dark:text-gray-200 dark:hover:bg-[#161b22]"
+                                dark:border-gray-700 dark:text-gray-900 dark:hover:bg-[#161b22]"
                     >
                       Clear
                     </button>
@@ -218,7 +218,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
             {/* Page content */}
             {/* <main className="px-3 py-3 sm:px-4">{children}</main> */}
-            <main className="px-3 py-3 sm:px-4 text-gray-900 dark:text-gray-100">
+            <main className="px-3 py-3 sm:px-4 text-gray-900 dark:text-gray-900">
               {children}
             </main>
 
