@@ -134,7 +134,7 @@ export default function LoginPage() {
                   setInfo(null);
                 }}
                 placeholder={lang === "fr" ? "ex: admin@smartagro.com" : "e.g. admin@smartagro.com"}
-                className="w-full rounded-md border border-gray-600 px-3 py-2 text-gray-750 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
+                className="w-full rounded-md border border-gray-600 px-3 py-2 text-gray-100 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
                 required
               />
             </div>
@@ -156,7 +156,7 @@ export default function LoginPage() {
                     setInfo(null);
                   }}
                   placeholder="••••••"
-                  className="w-full rounded-md border border-gray-200 px-3 py-2 pr-10 text-gray-750 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 pr-10 text-gray-100 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
                   required
                 />
 
