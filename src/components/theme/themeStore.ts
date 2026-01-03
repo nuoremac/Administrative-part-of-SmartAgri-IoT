@@ -1,10 +1,9 @@
-// src/components/theme/themeStore.ts
 export type Theme = "light" | "dark";
 
 const LS_KEY = "smartagro:theme";
 const EVT = "smartagro:theme:changed";
 
-const SERVER_THEME: Theme = "light"; // stable SSR default
+const SERVER_THEME: Theme = "light"; // stable SSR
 let cache: Theme = SERVER_THEME;
 
 function hasWindow() {
@@ -17,6 +16,7 @@ function normalizeTheme(v: unknown): Theme | null {
 
 export function subscribeTheme(cb: () => void) {
   if (!hasWindow()) return () => {};
+
   const handler = () => cb();
   window.addEventListener(EVT, handler);
 
@@ -31,6 +31,7 @@ export function subscribeTheme(cb: () => void) {
   };
 }
 
+// ✅ PURE snapshot (no writes, no dispatch, no setState)
 export function getThemeSnapshot(): Theme {
   if (!hasWindow()) return SERVER_THEME;
   const stored = normalizeTheme(localStorage.getItem(LS_KEY));
