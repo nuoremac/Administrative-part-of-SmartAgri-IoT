@@ -35,7 +35,7 @@ export default function SplashScreen() {
         <div className="text-center">
           <div className="relative mx-auto mb-4 h-20 w-20 overflow-hidden rounded-full bg-white shadow-lg animate-[pop_700ms_ease-out]">
                 <Image
-                    src="/images/Agri-IOT(1).png"
+                    src="/images/logo.png"
                     alt="Smart Agro logo"
                     fill
                     priority
