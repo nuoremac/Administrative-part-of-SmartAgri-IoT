@@ -1,23 +1,23 @@
-// src/lib/mockSensors.ts
+import { applyListParams, readFromStorage, writeToStorage, type ListParams, type ListResult } from "./mockStore";
+
 export type SensorStatus = "ok" | "warning" | "offline";
 
 export type SensorRow = {
-  id: string;               // idCapteur
-  name: string;             // nom capteur
-  status: SensorStatus;     // statut
-  lastMeasure: string;      // dernière mesure (text for now)
-  lastMeasureAt: string;    // ISO date
-  parcels: string[];        // parcelles associées (IDs)
+  id: string; // idCapteur
+  name: string; // nom capteur
+  status: SensorStatus; // statut
+  lastMeasure: string; // dernière mesure (text for now)
+  lastMeasureAt: string; // ISO date
+  parcels: string[]; // parcelles associées (IDs)
 };
 
 const LS_KEY = "smartagro:sensors";
 const EVT = "smartagro:sensors:changed";
 
-const EMPTY_SENSORS: SensorRow[] = []; // ✅ stable reference for server snapshot
+const EMPTY_SENSORS: SensorRow[] = [];
 
-let cache: SensorRow[] | null = null;  // ✅ in-memory cache (stable snapshot)
-let didInit = false;                   // ✅ avoid seeding during getSnapshot loop
-
+let cache: SensorRow[] | null = null;
+let didInit = false;
 
 function hasWindow() {
   return typeof window !== "undefined" && typeof localStorage !== "undefined";
@@ -53,29 +53,13 @@ function seed(): SensorRow[] {
 
 function readAll(): SensorRow[] {
   if (!hasWindow()) return EMPTY_SENSORS;
-
-  const raw = localStorage.getItem(LS_KEY);
-
-  // ✅ Seed only once, without dispatching an event
-  if (!raw) {
-    const initial = seed();
-    localStorage.setItem(LS_KEY, JSON.stringify(initial));
-    return initial;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as SensorRow[];
-    return Array.isArray(parsed) ? parsed : EMPTY_SENSORS;
-  } catch {
-    return EMPTY_SENSORS;
-  }
+  return readFromStorage<SensorRow>(LS_KEY, seed);
 }
-
 
 function writeAll(rows: SensorRow[]) {
   if (!hasWindow()) return;
-  localStorage.setItem(LS_KEY, JSON.stringify(rows));
-  cache = rows; // ✅ keep cache in sync
+  writeToStorage<SensorRow>(LS_KEY, rows);
+  cache = rows;
   window.dispatchEvent(new Event(EVT));
 }
 
@@ -84,13 +68,32 @@ function writeAll(rows: SensorRow[]) {
 
 // ---- Public API ----
 
-export function listSensors(): SensorRow[] {
-  return getSensorsSnapshot();
+export function listSensors(params: ListParams = {}): ListResult<SensorRow> {
+  return applyListParams(getSensorsSnapshot(), params, ["id", "name", "status", "lastMeasure"]);
 }
 
 
 export function getSensor(id: string): SensorRow | undefined {
   return getSensorsSnapshot().find((s) => s.id === id);
+}
+
+export function createSensor(input: Omit<SensorRow, "id" | "lastMeasureAt">): SensorRow {
+  const all = readAll();
+  const maxNum = Math.max(0, ...all.map((s) => Number(s.id.replace("S-", "")) || 0));
+  const id = `S-${String(maxNum + 1).padStart(3, "0")}`;
+  const sensor: SensorRow = { ...input, id, lastMeasureAt: new Date().toISOString() };
+  writeAll([sensor, ...all]);
+  return sensor;
+}
+
+export function updateSensor(id: string, patch: Partial<Omit<SensorRow, "id">>): SensorRow | null {
+  const all = readAll();
+  const idx = all.findIndex((s) => s.id === id);
+  if (idx < 0) return null;
+  const updated = { ...all[idx], ...patch };
+  all[idx] = updated;
+  writeAll(all);
+  return updated;
 }
 
 
@@ -139,4 +142,3 @@ export function getSensorsSnapshot(): SensorRow[] {
 export function getSensorsServerSnapshot(): SensorRow[] {
   return EMPTY_SENSORS; // ✅ stable cached array
 }
-

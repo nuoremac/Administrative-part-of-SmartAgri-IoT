@@ -1,41 +1,71 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import UserModal from "@/components/admin/users/UserModal";
-import { useToast } from "@/components/ui/ToastProvider";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
+import { useToast } from "@/components/ui/ToastProvider";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import TerrainModal from "@/components/admin/terrains/TerrainModal";
+import LocaliteModal from "@/components/admin/terrains/LocaliteModal";
 import { useT } from "@/components/i18n/useT";
-import { useLang } from "@/components/i18n/LangProvider";
 import {
-  createUser,
-  deleteUser,
-  listUsers,
-  restoreUser,
-  updateUser,
-  type UserRow,
-} from "@/lib/mockUsers";
+  createTerrain,
+  deleteTerrain,
+  listTerrains,
+  restoreTerrain,
+  updateTerrain,
+  type TerrainRow,
+} from "@/lib/mockTerrains";
+import { createLocalite, listLocalites, type Localite } from "@/lib/mockLocalites";
 
-type SortKey = "name" | "parcels";
+type SortKey = "id" | "name" | "owner" | "area" | "localiteId";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
 
-export default function AdminUsersPage() {
+function useIsClient() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+}
+
+export default function TerrainsPage() {
+  const router = useRouter();
+  const { query } = useAdminSearch();
   const { push } = useToast();
   const { t } = useT();
-  const { lang } = useLang();
-  const { query: q } = useAdminSearch();
+  const isClient = useIsClient();
 
   const [refreshKey, setRefreshKey] = useState(0);
-
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
-
+  const [sortKey, setSortKey] = useState<SortKey>("id");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [confirmTerrain, setConfirmTerrain] = useState<TerrainRow | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
-  const [editing, setEditing] = useState<UserRow | null>(null);
-  const [confirmUser, setConfirmUser] = useState<UserRow | null>(null);
+  const [editing, setEditing] = useState<TerrainRow | null>(null);
+  const [localiteOpen, setLocaliteOpen] = useState(false);
+
+  const localitesResult = useMemo(() => listLocalites(), [refreshKey]);
+  const localites = localitesResult.items;
+  const localiteMap = useMemo(
+    () => new Map(localites.map((l) => [l.id, `${l.name} — ${l.city}, ${l.country}`])),
+    [localites]
+  );
+
+  const listResult = useMemo(() => {
+    return listTerrains({
+      search: query,
+      sortKey,
+      sortDir,
+      skip: (page - 1) * PAGE_SIZE,
+      limit: PAGE_SIZE,
+    });
+  }, [query, sortKey, sortDir, page, refreshKey]);
+
+  const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
+  const safePage = Math.min(Math.max(page, 1), totalPages);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -46,98 +76,76 @@ export default function AdminUsersPage() {
     setSortDir((d) => (d === "asc" ? "desc" : "asc"));
   };
 
-  const listResult = useMemo(() => {
-    return listUsers({
-      search: q,
-      sortKey,
-      sortDir,
-      skip: (page - 1) * PAGE_SIZE,
-      limit: PAGE_SIZE,
-    });
-  }, [q, sortKey, sortDir, page, refreshKey]);
-
-  const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
-  const safePage = Math.min(Math.max(page, 1), totalPages);
-
   const openCreate = () => {
     setModalMode("create");
     setEditing(null);
     setModalOpen(true);
   };
 
-  const openEdit = (u: UserRow) => {
+  const openEdit = (row: TerrainRow) => {
     setModalMode("edit");
-    setEditing(u);
+    setEditing(row);
     setModalOpen(true);
   };
 
-  const onSubmitModal = (data: Omit<UserRow, "id">) => {
-    if (!data.name?.trim() || !data.email?.trim()) {
-      push({
-        title: t("invalidCredentials"),
-        message: t("email"),
-        kind: "error",
-      });
+  const handleSubmit = (data: { name: string; owner: string; area: number; localiteId: string }) => {
+    if (!data.name || !data.owner || !data.localiteId) {
+      push({ title: t("invalidCredentials"), message: t("terrain_name"), kind: "error" });
       return;
     }
 
     if (modalMode === "create") {
-      const created = createUser(data);
+      const created = createTerrain(data);
       setRefreshKey((k) => k + 1);
       setModalOpen(false);
       setPage(1);
-      push({
-        title: t("add_user"),
-        message: `${created.name}`,
-        kind: "success",
-      });
+      push({ title: t("add_terrain"), message: created.name, kind: "success" });
       return;
     }
 
     if (editing) {
-      const updated = updateUser(editing.id, data);
+      const updated = updateTerrain(editing.id, data);
       setRefreshKey((k) => k + 1);
       setModalOpen(false);
-      push({
-        title: t("edit_user"),
-        message: updated ? `${updated.name}` : t("save"),
-        kind: "success",
-      });
+      push({ title: t("edit_terrain"), message: updated?.name ?? t("save"), kind: "success" });
     }
   };
 
   const confirmDelete = () => {
-    if (!confirmUser) return;
-    const removed = deleteUser(confirmUser.id);
-    setConfirmUser(null);
+    if (!confirmTerrain) return;
+    const removed = deleteTerrain(confirmTerrain.id);
+    setConfirmTerrain(null);
     if (!removed) return;
 
     setRefreshKey((k) => k + 1);
 
     push({
       title: t("delete_toast_title"),
-      message: `${removed.name}`,
+      message: removed.name,
       actionLabel: t("undo"),
       onAction: () => {
-        restoreUser(removed);
+        restoreTerrain(removed);
         setRefreshKey((k) => k + 1);
-        push({
-          title: t("delete_toast_undo"),
-          message: `${removed.name}`,
-          kind: "success",
-        });
+        push({ title: t("delete_toast_undo"), message: removed.name, kind: "success" });
       },
     });
   };
 
-  return (
+  const handleAddLocalite = (data: { name: string; city: string; country: string }) => {
+    if (!data.name || !data.city || !data.country) return;
+    createLocalite(data);
+    setRefreshKey((k) => k + 1);
+    setLocaliteOpen(false);
+  };
+
+  return isClient ? (
     <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
       <div className="mb-3 flex items-end justify-between gap-2">
         <div>
           <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            {t("nav_users")} <span className="text-gray-600 dark:text-gray-400">({listResult.total})</span>
+            {t("nav_terrains")} <span className="text-gray-600 dark:text-gray-400">({listResult.total})</span>
           </h1>
-          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("global_search_placeholder")}</p>
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("terrains_subtitle")}</p>
         </div>
 
         <button
@@ -145,33 +153,20 @@ export default function AdminUsersPage() {
           onClick={openCreate}
           className="h-9 rounded-sm bg-green-600 px-3 text-xs font-semibold text-white hover:bg-green-700"
         >
-          + {t("add_user")}
+          + {t("add_terrain")}
         </button>
       </div>
-
-      {q ? (
-        <div className="mb-3 rounded-sm border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700
-                        dark:border-gray-800 dark:bg-[#161b22] dark:text-gray-200">
-          {t("search")}: <span className="font-semibold">{q}</span>
-        </div>
-      ) : null}
 
       <div className="overflow-hidden rounded-sm border border-gray-300 bg-white shadow-sm dark:border-gray-800 dark:bg-[#0d1117]">
         <div className="overflow-x-auto">
           <table className="min-w-[980px] w-full text-left text-sm">
             <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
               <tr className="border-b border-gray-200 dark:border-gray-800">
+                <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
                 <ThSortable label={t("table_name")} active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
-                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("email")}</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">Tel</th>
-                <ThSortable
-                  label={t("table_parcels")}
-                  active={sortKey === "parcels"}
-                  dir={sortDir}
-                  onClick={() => toggleSort("parcels")}
-                />
-                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_status")}</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_last_activity")}</th>
+                <ThSortable label={t("table_owner")} active={sortKey === "owner"} dir={sortDir} onClick={() => toggleSort("owner")} />
+                <ThSortable label={t("table_area")} active={sortKey === "area"} dir={sortDir} onClick={() => toggleSort("area")} />
+                <ThSortable label={t("table_locality")} active={sortKey === "localiteId"} dir={sortDir} onClick={() => toggleSort("localiteId")} />
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
               </tr>
             </thead>
@@ -179,48 +174,42 @@ export default function AdminUsersPage() {
             <tbody>
               {listResult.items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
-                    {t("empty_users")}
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
+                    {t("empty_terrains")}
                   </td>
                 </tr>
               ) : (
-                listResult.items.map((u) => (
+                listResult.items.map((row) => (
                   <tr
-                    key={u.id}
+                    key={row.id}
                     className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                   >
-                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">
-                      {u.name}
-                      <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                        {u.role === "ADMIN" ? "Admin" : t("admin_kpi_farmers")}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{u.email}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{u.tel}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{u.parcels}</td>
-
-                    <td className="px-4 py-3">
-                      <StatusBadge status={u.status} t={t} />
-                    </td>
-
+                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{row.id}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{row.name}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{row.owner}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{row.area.toLocaleString()}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                      {formatLastActivity(u.lastActivity, lang)}
+                      {localiteMap.get(row.localiteId) ?? row.localiteId}
                     </td>
-
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => openEdit(u)}
+                          onClick={() => router.push(`/admin/terrains/${row.id}`)}
                           className="rounded-full bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
+                        >
+                          {t("consult")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(row)}
+                          className="rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600"
                         >
                           {t("edit")}
                         </button>
-
                         <button
                           type="button"
-                          onClick={() => setConfirmUser(u)}
+                          onClick={() => setConfirmTerrain(row)}
                           className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
                         >
                           {t("delete")}
@@ -245,25 +234,36 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <UserModal
+      <TerrainModal
         key={`${modalMode}_${editing?.id ?? "new"}_${modalOpen ? "open" : "closed"}`}
         open={modalOpen}
         mode={modalMode}
         initial={editing}
+        localites={localites}
         onClose={() => setModalOpen(false)}
-        onSubmit={onSubmitModal}
+        onSubmit={handleSubmit}
+        onAddLocalite={() => setLocaliteOpen(true)}
+      />
+
+      <LocaliteModal
+        key={`${localiteOpen ? "open" : "closed"}_${refreshKey}`}
+        open={localiteOpen}
+        onClose={() => setLocaliteOpen(false)}
+        onSubmit={handleAddLocalite}
       />
 
       <ConfirmDialog
-        open={!!confirmUser}
+        open={!!confirmTerrain}
         title={t("delete_confirm_title")}
         message={t("delete_confirm_body")}
         confirmLabel={t("delete")}
         cancelLabel={t("cancel")}
         onConfirm={confirmDelete}
-        onCancel={() => setConfirmUser(null)}
+        onCancel={() => setConfirmTerrain(null)}
       />
     </div>
+  ) : (
+    <TerrainsSkeleton />
   );
 }
 
@@ -342,31 +342,19 @@ function Pagination({
   );
 }
 
-function StatusBadge({ status, t }: { status: UserRow["status"]; t: (k: string) => string }) {
-  const cls =
-    status === "active"
-      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
-      : status === "pending"
-      ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200"
-      : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200";
-
-  const label =
-    status === "active"
-      ? t("status_active")
-      : status === "pending"
-      ? t("status_pending")
-      : t("status_blocked");
-  return <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${cls}`}>{label}</span>;
-}
-
-function formatLastActivity(iso: string, lang: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const diffMs = Date.now() - d.getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 60) return lang === "fr" ? `il y a ${mins} min` : `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return lang === "fr" ? `il y a ${hours} h` : `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return lang === "fr" ? `il y a ${days} j` : `${days}d ago`;
+function TerrainsSkeleton() {
+  return (
+    <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
+      <div className="mb-3 flex items-end justify-between gap-2">
+        <div>
+          <div className="h-4 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+          <div className="mt-2 h-3 w-56 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+        </div>
+        <div className="h-9 w-28 animate-pulse rounded-sm bg-gray-200 dark:bg-gray-800" />
+      </div>
+      <div className="overflow-hidden rounded-sm border border-gray-300 bg-white shadow-sm dark:border-gray-800 dark:bg-[#0d1117]">
+        <div className="h-[360px] w-full animate-pulse bg-gray-100 dark:bg-[#161b22]" />
+      </div>
+    </div>
+  );
 }

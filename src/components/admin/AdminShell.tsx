@@ -7,10 +7,74 @@ import { useEffect, useMemo, useState } from "react";
 import { clearUser, getUser } from "@/lib/mockSession";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
+import { useLang, type Lang } from "@/components/i18n/LangProvider";
+import { useT } from "@/components/i18n/useT";
 
 
 
-type NavItem = { href: string; label: string };
+type NavItem = { href: string; label: string; icon: React.ReactNode };
+
+const iconClass = "h-4 w-4";
+
+function IconDashboard() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+function IconUsers() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 19c0-3 3-5 5.5-5s5.5 2 5.5 5" />
+      <circle cx="17" cy="9" r="2.5" />
+      <path d="M14.5 19c.2-2.1 2-3.6 4-3.6 1.2 0 2.4.4 3.1 1.1" />
+    </svg>
+  );
+}
+
+function IconTerrains() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 18l6-6 4 4 6-6" />
+      <path d="M4 6h16v12H4z" />
+    </svg>
+  );
+}
+
+function IconParcels() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="4" width="14" height="14" rx="1" />
+      <path d="M7 4v14M3 9h14" />
+      <rect x="9" y="9" width="12" height="12" rx="1" />
+    </svg>
+  );
+}
+
+function IconSensors() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+      <path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4" />
+    </svg>
+  );
+}
+
+function IconLogout() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M10 7V5a2 2 0 0 1 2-2h6v18h-6a2 2 0 0 1-2-2v-2" />
+      <path d="M4 12h10" />
+      <path d="M8 8l-4 4 4 4" />
+    </svg>
+  );
+}
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -18,6 +82,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { query, setQuery, clear } = useAdminSearch();
   const { theme, toggleTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const { lang, setLang } = useLang();
+  const { t } = useT();
 
   
 
@@ -27,14 +94,19 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     if (!u || u.role !== "ADMIN") router.replace("/login");
   }, [router]);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const nav: NavItem[] = useMemo(
     () => [
-      { href: "/admin/dashboard", label: "Dashboard" },
-      { href: "/admin/users", label: "Utilisateurs" },
-      { href: "/admin/parcels", label: "Parcelles" },
-      { href: "/admin/sensors", label: "Capteurs" },
+      { href: "/admin/dashboard", label: t("nav_dashboard"), icon: <IconDashboard /> },
+      { href: "/admin/users", label: t("nav_users"), icon: <IconUsers /> },
+      { href: "/admin/terrains", label: t("nav_terrains"), icon: <IconTerrains /> },
+      { href: "/admin/parcels", label: t("nav_parcels"), icon: <IconParcels /> },
+      { href: "/admin/sensors", label: t("nav_sensors"), icon: <IconSensors /> },
     ],
-    []
+    [t]
   );
 
   const logout = () => {
@@ -43,7 +115,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   };
 
   const Sidebar = (
-    <aside className="h-full w-[220px] bg-green-200">
+    <aside className="flex h-full w-[220px] flex-col bg-green-200">
       {/* brand */}
       <div className="flex items-center gap-2 px-3 py-2">
         <div className="relative h-6 w-6 overflow-hidden rounded-full bg-white">
@@ -61,7 +133,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             </div>
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold text-green-950">
-                Admin principale
+                {t("admin_primary")}
               </p>
               <p className="truncate text-[11px] text-green-900/70">admin</p>
             </div>
@@ -70,7 +142,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       </div>
 
       {/* nav */}
-      <nav className="px-3 py-3">
+      <nav className="flex-1 px-3 py-3">
         {nav.map((item) => {
           const active = pathname === item.href;
           return (
@@ -78,26 +150,30 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               key={item.href}
               href={item.href}
               className={[
-                "block w-full rounded-md px-3 py-2 text-left text-xs font-semibold",
+                "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold",
                 active
                   ? "bg-white text-green-900"
                   : "text-green-950/80 hover:bg-white/70",
               ].join(" ")}
             >
-              {item.label}
+              <span className="text-green-900/80">{item.icon}</span>
+              <span>{item.label}</span>
             </Link>
           );
         })}
-
-        <div className="mt-4">
-          <button
-            onClick={logout}
-            className="w-full rounded-md bg-white/70 px-3 py-2 text-left text-xs font-semibold text-green-900 hover:bg-white"
-          >
-            Déconnexion
-          </button>
-        </div>
       </nav>
+
+      <div className="px-3 pb-3">
+        <button
+          onClick={logout}
+          className="flex w-full items-center gap-2 rounded-md bg-white/70 px-3 py-2 text-left text-xs font-semibold text-green-900 hover:bg-white"
+        >
+          <span className="text-green-900/80">
+            <IconLogout />
+          </span>
+          <span>{t("logout")}</span>
+        </button>
+      </div>
     </aside>
   );
 
@@ -178,16 +254,14 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                     Search
                   </button>
                 </form> */}
-                <form
-                  className="ml-auto flex w-full max-w-[520px] items-center gap-2"
-                  onSubmit={(e) => e.preventDefault()}
-                >
+                <form className="ml-auto flex w-full max-w-[520px] items-center gap-2" onSubmit={(e) => e.preventDefault()}>
                   <input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search..."
-                    className="w-full min-w-0 rounded-sm border border-gray-200 bg-white px-2 py-1 text-sm outline-none focus:border-green-500
-                              dark:border-gray-700 dark:bg-gray-900 dark:text-gray-900 dark:placeholder:text-gray-500"
+                    placeholder={t("global_search_placeholder")}
+                    className="w-full min-w-0 rounded-sm border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900 outline-none
+                              placeholder:text-gray-400 focus:border-green-500
+                              dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
                   />
 
                   {query ? (
@@ -197,7 +271,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                       className="shrink-0 rounded-sm border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
                                 dark:border-gray-700 dark:text-gray-900 dark:hover:bg-[#161b22]"
                     >
-                      Clear
+                      {t("clear")}
                     </button>
                   ) : null}
 
@@ -208,17 +282,37 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                       // optional: keep it for UX (“search button”), but search is live anyway
                     }}
                   >
-                    Search
+                    {t("search")}
                   </button>
                 </form>
+              </div>
 
-
+              <div className="flex items-center gap-2">
+                <select
+                  value={lang}
+                  onChange={(e) => setLang(e.target.value as Lang)}
+                  className="rounded-sm border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700
+                            dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                  aria-label={t("language")}
+                >
+                  <option value="en">🇬🇧 EN</option>
+                  <option value="fr">🇫🇷 FR</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => mounted && toggleTheme()}
+                  className="rounded-sm border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
+                            dark:border-gray-700 dark:text-gray-100 dark:hover:bg-[#161b22]"
+                  disabled={!mounted}
+                >
+                  {mounted ? (theme === "dark" ? t("theme_light") : t("theme_dark")) : t("theme_dark")}
+                </button>
               </div>
             </header>
 
             {/* Page content */}
             {/* <main className="px-3 py-3 sm:px-4">{children}</main> */}
-            <main className="px-3 py-3 sm:px-4 text-gray-900 dark:text-gray-900">
+            <main className="px-3 py-3 sm:px-4 text-gray-900 dark:text-gray-100">
               {children}
             </main>
 

@@ -1,3 +1,5 @@
+import { applyListParams, readFromStorage, writeToStorage, type ListParams, type ListResult } from "./mockStore";
+
 export type UserStatus = "active" | "pending" | "blocked";
 export type UserRole = "FARMER" | "ADMIN";
 
@@ -43,28 +45,16 @@ function seed(): UserRow[] {
 }
 
 function readAll(): UserRow[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(LS_KEY);
-  if (!raw) {
-    const initial = seed();
-    localStorage.setItem(LS_KEY, JSON.stringify(initial));
-    return initial;
-  }
-  try {
-    const parsed = JSON.parse(raw) as UserRow[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return readFromStorage<UserRow>(LS_KEY, seed);
 }
 
 function writeAll(users: UserRow[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(LS_KEY, JSON.stringify(users));
+  writeToStorage<UserRow>(LS_KEY, users);
 }
 
-export function listUsers(): UserRow[] {
-  return readAll();
+export function listUsers(params: ListParams = {}): ListResult<UserRow> {
+  const rows = readAll();
+  return applyListParams(rows, params, ["name", "email", "tel", "status", "role"]);
 }
 
 export function getUser(id: string): UserRow | undefined {

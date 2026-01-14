@@ -3,8 +3,12 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getParcel, updateParcel, type ParcelRow } from "@/lib/mockParcels";
+import { getTerrain } from "@/lib/mockTerrains";
 import EditParcelModal from "@/components/admin/parcels/EditParcelModal";
 import { useToast } from "@/components/ui/ToastProvider";
+import { useT } from "@/components/i18n/useT";
+import { useLang } from "@/components/i18n/LangProvider";
+import { listParcelMoistureData } from "@/lib/mockSensorData";
 import {
   LineChart,
   Line,
@@ -23,36 +27,33 @@ type Sensor = {
   status: "ok" | "warning" | "offline";
 };
 
-// deterministic mock time (no Date.now() during render)
 const MOCK_NOW_MS = Date.parse("2026-01-02T12:00:00.000Z");
 
-// hydration-safe "am I on client?"
 function useIsClient() {
   return useSyncExternalStore(
-    () => () => {}, // no-op subscribe
-    () => true, // client snapshot
-    () => false // server snapshot
+    () => () => {},
+    () => true,
+    () => false
   );
 }
 
 export default function ParcelDetailsPage() {
   const params = useParams();
-  const raw = (params)?.id;
+  const raw = params?.id;
   const id: string = Array.isArray(raw) ? raw[0] : (raw ?? "");
-
-  // key remount ensures clean state when switching parcels
   return <ParcelDetailsInner key={id} id={id} />;
 }
 
 function ParcelDetailsInner({ id }: { id: string }) {
   const router = useRouter();
   const { push } = useToast();
+  const { t } = useT();
+  const { lang } = useLang();
   const isClient = useIsClient();
-
-  // ---- Hooks must always run (no early returns above) ----
 
   const [editOpen, setEditOpen] = useState(false);
   const [parcelView, setParcelView] = useState<ParcelRow | null>(null);
+  const [range, setRange] = useState<"24h" | "7d">("24h");
 
   const sensors: Sensor[] = useMemo(
     () => [
@@ -81,30 +82,18 @@ function ParcelDetailsInner({ id }: { id: string }) {
     []
   );
 
-  const [range, setRange] = useState<"24h" | "7d">("24h");
-
-  const moistureData = useMemo(() => {
-    const points = range === "24h" ? 24 : 7;
-    const stepMs = range === "24h" ? 3600000 : 86400000;
-    const now = MOCK_NOW_MS;
-
-    return Array.from({ length: points }, (_, i) => {
-      const t = new Date(now - (points - 1 - i) * stepMs);
-      const label =
-        range === "24h"
-          ? `${t.getHours().toString().padStart(2, "0")}:00`
-          : t.toLocaleDateString();
-
-      const value = Math.round(35 + 15 * Math.sin(i / 2) + (i % 3) * 2);
-      return { t: label, value };
-    });
-  }, [range]);
-
-  // localStorage read only on client snapshot
   const parcelFromStore = isClient && id ? getParcel(id) : undefined;
   const displayed: ParcelRow | undefined = parcelView ?? parcelFromStore;
+  const terrain = displayed?.terrainId ? getTerrain(displayed.terrainId) : undefined;
 
-  // ---- Render decisions AFTER hooks (safe) ----
+  const moistureData = useMemo(() => {
+    if (!displayed) return [];
+    const series = listParcelMoistureData({ parcelId: displayed.id, range });
+    return series.map((point) => ({
+      t: range === "24h" ? new Date(point.at).toLocaleTimeString() : new Date(point.at).toLocaleDateString(),
+      value: point.value,
+    }));
+  }, [displayed, range]);
 
   if (!isClient || !id) {
     return <ParcelDetailsSkeleton />;
@@ -118,16 +107,12 @@ function ParcelDetailsInner({ id }: { id: string }) {
           className="rounded-sm border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50
                      dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-200"
         >
-          ← Retour
+          ← {t("back_to_list")}
         </button>
 
         <div className="mt-4 rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117]">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-            Parcelle introuvable
-          </p>
-          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-            L’identifiant “{id}” n’existe pas dans les données mock.
-          </p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("parcel_not_found")}</p>
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{id}</p>
         </div>
       </div>
     );
@@ -135,7 +120,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
 
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
-      {/* Header */}
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <button
@@ -143,47 +127,38 @@ function ParcelDetailsInner({ id }: { id: string }) {
             className="mb-2 inline-flex rounded-sm border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
                        dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-200"
           >
-            ← Parcelles
+            ← {t("back_to_list")}
           </button>
 
           <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            Détail parcelle{" "}
-            <span className="text-gray-600 dark:text-gray-400">{displayed.id}</span>
+            {t("parcel_details_title")} <span className="text-gray-600 dark:text-gray-400">{displayed.id}</span>
           </h1>
 
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-            Propriétaire: <span className="font-semibold">{displayed.owner}</span> • Superficie:{" "}
-            <span className="font-semibold">{displayed.area.toLocaleString()} m²</span> • Capteurs:{" "}
+            {t("parcel_owner_label")}: <span className="font-semibold">{displayed.owner}</span> • {t("parcel_area_label")}{" "}
+            <span className="font-semibold">{displayed.area.toLocaleString()} m²</span> • {t("parcel_sensors_label")}{" "}
             <span className="font-semibold">{displayed.sensors}</span>
           </p>
         </div>
 
-        {/* Range selector */}
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-            Tendance:
-          </span>
+          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{t("parcel_trend_label")}:</span>
           <select
             value={range}
             onChange={(e) => setRange(e.target.value as "24h" | "7d")}
             className="h-9 rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
                        dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
           >
-            <option value="24h">24h</option>
-            <option value="7d">7 jours</option>
+            <option value="24h">{t("dashboard_range_24h")}</option>
+            <option value="7d">{t("dashboard_range_7d")}</option>
           </select>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Chart */}
         <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-2">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-            Humidité du sol (%)
-          </p>
-          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-            Exemple de courbe (mock) — plus tard: données réelles capteurs.
-          </p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("dashboard_moisture_label")}</p>
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("parcel_chart_subtitle")}</p>
 
           <div className="mt-3 h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -198,19 +173,21 @@ function ParcelDetailsInner({ id }: { id: string }) {
           </div>
         </div>
 
-        {/* Parcel info card */}
         <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117]">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Informations</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("parcel_details_title")}</p>
 
           <div className="mt-3 space-y-2 text-xs text-gray-700 dark:text-gray-300">
-            <Row label="ID" value={displayed.id} />
-            <Row label="Nom" value={displayed.name} />
-            <Row label="Propriétaire" value={displayed.owner} />
-            <Row label="Superficie" value={`${displayed.area.toLocaleString()} m²`} />
-            <Row label="Nb capteurs" value={`${displayed.sensors}`} />
-            {displayed.lastUpdate ? (
-              <Row label="Dernière MAJ" value={formatLastUpdate(displayed.lastUpdate)} />
-            ) : null}
+            <Row label={t("table_id")} value={displayed.id} />
+            <Row label={t("table_name")} value={displayed.name} />
+            <Row label={t("parcel_owner_label")} value={displayed.owner} />
+            <Row label={t("parcel_area_label")} value={`${displayed.area.toLocaleString()} m²`} />
+            <Row label={t("parcel_sensors_label")} value={`${displayed.sensors}`} />
+            {displayed.lastUpdate ? <Row label={t("parcel_last_update")} value={formatLastUpdate(displayed.lastUpdate)} /> : null}
+            {terrain ? (
+              <Row label={t("table_terrain")} value={terrain.name} />
+            ) : (
+              <Row label={t("table_terrain")} value={displayed.terrainId} />
+            )}
           </div>
 
           <button
@@ -218,28 +195,25 @@ function ParcelDetailsInner({ id }: { id: string }) {
             onClick={() => setEditOpen(true)}
             className="mt-4 h-9 w-full rounded-sm bg-green-600 px-3 text-xs font-semibold text-white hover:bg-green-700"
           >
-            Modifier la parcelle
+            {t("edit_parcel")}
           </button>
         </div>
 
-        {/* Sensors table */}
         <div className="rounded-sm border border-gray-300 bg-white dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-3">
           <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Capteurs</p>
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-              Liste des capteurs associés à cette parcelle.
-            </p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("attached_sensors")}</p>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("parcel_sensors_subtitle")}</p>
           </div>
 
           <div className="overflow-x-auto">
             <table className="min-w-[780px] w-full text-left text-sm">
-              <thead className="bg-gray-50 dark:bg-[#161b22]">
+              <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
                 <tr className="border-b border-gray-200 dark:border-gray-800">
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">ID</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">Nom</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">Type</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">Dernière activité</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">Statut</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_id")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_name")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_type")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_last_activity")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_status")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -251,9 +225,9 @@ function ParcelDetailsInner({ id }: { id: string }) {
                     <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{s.id}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.name}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.type}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{formatAgo(s.lastSeen)}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{formatAgo(s.lastSeen, lang)}</td>
                     <td className="px-4 py-3">
-                      <SensorBadge status={s.status} />
+                      <SensorBadge status={s.status} t={t} />
                     </td>
                   </tr>
                 ))}
@@ -263,7 +237,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* ✅ Modal lives here (inside the return, before closing div) */}
       <EditParcelModal
         key={displayed.id}
         open={editOpen}
@@ -275,8 +248,8 @@ function ParcelDetailsInner({ id }: { id: string }) {
 
           if (!updated) {
             push({
-              title: "Erreur",
-              message: "Impossible de modifier cette parcelle.",
+              title: t("invalidCredentials"),
+              message: t("edit_parcel"),
               kind: "error",
             });
             return;
@@ -285,8 +258,8 @@ function ParcelDetailsInner({ id }: { id: string }) {
           setParcelView(updated);
 
           push({
-            title: "Parcelle mise à jour",
-            message: `${updated.id} modifiée avec succès.`,
+            title: t("edit_parcel"),
+            message: `${updated.id}`,
             kind: "success",
           });
         }}
@@ -316,7 +289,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SensorBadge({ status }: { status: "ok" | "warning" | "offline" }) {
+function SensorBadge({ status, t }: { status: "ok" | "warning" | "offline"; t: (k: string) => string }) {
   const cls =
     status === "ok"
       ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
@@ -324,7 +297,7 @@ function SensorBadge({ status }: { status: "ok" | "warning" | "offline" }) {
       ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200"
       : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200";
 
-  const label = status === "ok" ? "OK" : status === "warning" ? "Attention" : "Hors ligne";
+  const label = status === "ok" ? t("status_ok") : status === "warning" ? t("status_warning") : t("status_offline");
   return <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${cls}`}>{label}</span>;
 }
 
@@ -334,14 +307,14 @@ function formatLastUpdate(iso: string) {
   return d.toLocaleString();
 }
 
-function formatAgo(iso: string) {
+function formatAgo(iso: string, lang: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   const diffMs = MOCK_NOW_MS - d.getTime();
   const mins = Math.floor(diffMs / 60000);
-  if (mins < 60) return `il y a ${mins} min`;
+  if (mins < 60) return lang === "fr" ? `il y a ${mins} min` : `${mins}m ago`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `il y a ${hours} h`;
+  if (hours < 24) return lang === "fr" ? `il y a ${hours} h` : `${hours}h ago`;
   const days = Math.floor(hours / 24);
-  return `il y a ${days} j`;
+  return lang === "fr" ? `il y a ${days} j` : `${days}d ago`;
 }

@@ -1,9 +1,12 @@
+import { applyListParams, readFromStorage, writeToStorage, type ListParams, type ListResult } from "./mockStore";
+
 export type ParcelRow = {
   id: string; // e.g. P001
   name: string;
   owner: string;
-  area: number; // m² or ha (you choose)
+  area: number; // m²
   sensors: number;
+  terrainId: string;
   lastUpdate: string; // ISO
 };
 
@@ -11,6 +14,7 @@ const LS_KEY = "smartagro_parcels_v1";
 
 function seed(): ParcelRow[] {
   const owners = ["Raoul", "Traousse", "Yann", "Yanndr", "Itihh", "Firrriv", "Amina", "Koffi", "Nadia", "Jean"];
+  const terrains = ["T001", "T002", "T003", "T004", "T005", "T006"];
   const now = Date.now();
 
   const rows: ParcelRow[] = [];
@@ -19,10 +23,11 @@ function seed(): ParcelRow[] {
     const owner = owners[(i - 1) % owners.length];
     rows.push({
       id,
-      name: "Email", // in your screenshot the "Nom" column shows "Email"
+      name: `Parcelle ${i}`,
       owner,
       area: 9000, // match screenshot
       sensors: (i % 7) + 3,
+      terrainId: terrains[i % terrains.length],
       lastUpdate: new Date(now - (i % 10) * 86400000).toISOString(),
     });
   }
@@ -30,38 +35,25 @@ function seed(): ParcelRow[] {
 }
 
 function readAll(): ParcelRow[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(LS_KEY);
-  if (!raw) {
-    const initial = seed();
-    localStorage.setItem(LS_KEY, JSON.stringify(initial));
-    return initial;
-  }
-  try {
-    const parsed = JSON.parse(raw) as ParcelRow[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return readFromStorage<ParcelRow>(LS_KEY, seed);
 }
 
 function writeAll(rows: ParcelRow[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(LS_KEY, JSON.stringify(rows));
+  writeToStorage<ParcelRow>(LS_KEY, rows);
 }
 
-export function listParcels(): ParcelRow[] {
-  return readAll();
+export function listParcels(params: ListParams = {}): ListResult<ParcelRow> {
+  return applyListParams(readAll(), params, ["id", "name", "owner", "terrainId"]);
 }
 
-export function createParcel(input: Omit<ParcelRow, "id">): ParcelRow {
+export function createParcel(input: Omit<ParcelRow, "id" | "lastUpdate">): ParcelRow {
   const rows = readAll();
   const maxNum = Math.max(
     0,
     ...rows.map((p) => Number(p.id.replace("P", "")) || 0)
   );
   const id = `P${String(maxNum + 1).padStart(3, "0")}`;
-  const parcel: ParcelRow = { ...input, id };
+  const parcel: ParcelRow = { ...input, id, lastUpdate: new Date().toISOString() };
   rows.unshift(parcel);
   writeAll(rows);
   return parcel;
@@ -99,7 +91,7 @@ export function getParcel(id: string): ParcelRow | undefined {
 
 export function updateParcel(
   id: string,
-  patch: Partial<Pick<ParcelRow, "name" | "owner" | "area" | "sensors" | "lastUpdate">>
+  patch: Partial<Pick<ParcelRow, "name" | "owner" | "area" | "sensors" | "terrainId" | "lastUpdate">>
 ): ParcelRow | null {
   const all = readAll();
   const idx = all.findIndex((p) => p.id === id);

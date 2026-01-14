@@ -1,8 +1,10 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import SoilMoistureLineChart from "@/components/charts/SoilMoistureLineChart";
+import { useT } from "@/components/i18n/useT";
+import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 
 /* ---------- Types ---------- */
 
@@ -19,39 +21,29 @@ type RangeKey = "24h" | "7d" | "30d";
 /* ---------- Page ---------- */
 
 export default function AdminDashboardPage() {
-  /* ----- Search (from AdminShell) ----- */
-  const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const q = (e as CustomEvent<string>).detail || "";
-      setSearch(q.toLowerCase());
-    };
-
-    window.addEventListener("admin:search", handler as EventListener);
-    return () =>
-      window.removeEventListener("admin:search", handler as EventListener);
-  }, []);
+  const { t } = useT();
+  const { query } = useAdminSearch();
+  const search = query.trim().toLowerCase();
 
   /* ----- KPI data ----- */
   const kpis = [
-    { value: 30, label: "Agriculteurs", valueClass: "text-red-600", meta: "+2 / semaine" },
-    { value: 70, label: "Terrains", valueClass: "text-orange-500", sub: "1000 m²", meta: "+5 / mois" },
-    { value: 500, label: "Parcelles", valueClass: "text-fuchsia-600", meta: "12 actives" },
-    { value: 20, label: "Capteurs", valueClass: "text-cyan-500", meta: "3 hors ligne" },
+    { value: 30, label: t("admin_kpi_farmers"), valueClass: "text-red-600", meta: t("dashboard_kpi_farmers_meta") },
+    { value: 70, label: t("admin_kpi_terrains"), valueClass: "text-orange-500", sub: "1000 m²", meta: t("dashboard_kpi_terrains_meta") },
+    { value: 500, label: t("admin_kpi_parcelles"), valueClass: "text-fuchsia-600", meta: t("dashboard_kpi_parcels_meta") },
+    { value: 20, label: t("admin_kpi_capteurs"), valueClass: "text-cyan-500", meta: t("dashboard_kpi_sensors_meta") },
   ];
 
   /* ----- Weather ----- */
   const weather = {
     location: "Darmstadt",
     now: "18°C",
-    condition: "Partly cloudy",
+    condition: t("dashboard_weather_condition"),
     wind: "9 km/h",
     humidity: "62%",
     forecast: [
-      { day: "Today", min: "14°", max: "19°" },
-      { day: "Tomorrow", min: "13°", max: "18°" },
-      { day: "Thu", min: "12°", max: "17°" },
+      { day: t("dashboard_weather_today"), min: "14°", max: "19°" },
+      { day: t("dashboard_weather_tomorrow"), min: "13°", max: "18°" },
+      { day: t("dashboard_weather_thu"), min: "12°", max: "17°" },
     ],
   };
 
@@ -99,10 +91,10 @@ export default function AdminDashboardPage() {
 
   /* ----- Alerts ----- */
   const alerts: Alert[] = [
-    { id: "a1", level: "critical", title: "Capteur #23 hors ligne", subtitle: "Parcelle B – Terrain Nord" },
-    { id: "a2", level: "warning", title: "Humidité basse", subtitle: "Parcelle A – irrigation recommandée" },
-    { id: "a3", level: "info", title: "Nouvelle trame reçue", subtitle: "Capteur #12 – il y a 3 min" },
-    { id: "a4", level: "warning", title: "Batterie faible", subtitle: "Capteur #08 – Parcelle D" },
+    { id: "a1", level: "critical", title: t("dashboard_alert_1_title"), subtitle: t("dashboard_alert_1_subtitle") },
+    { id: "a2", level: "warning", title: t("dashboard_alert_2_title"), subtitle: t("dashboard_alert_2_subtitle") },
+    { id: "a3", level: "info", title: t("dashboard_alert_3_title"), subtitle: t("dashboard_alert_3_subtitle") },
+    { id: "a4", level: "warning", title: t("dashboard_alert_4_title"), subtitle: t("dashboard_alert_4_subtitle") },
   ];
 
   const [alertFilter, setAlertFilter] = useState<"all" | AlertLevel>("all");
@@ -124,9 +116,9 @@ export default function AdminDashboardPage() {
 
   /* ----- Activity ----- */
   const recent = [
-    { id: "r1", text: "Capteur #12: données reçues (temp/humidité)", time: "10:42" },
-    { id: "r2", text: "Parcelle C: surface mise à jour", time: "09:10" },
-    { id: "r3", text: "Utilisateur ajouté: agriculteur_07", time: "hier" },
+    { id: "r1", text: t("dashboard_recent_1"), time: "10:42" },
+    { id: "r2", text: t("dashboard_recent_2"), time: "09:10" },
+    { id: "r3", text: t("dashboard_recent_3"), time: t("dashboard_recent_yesterday") },
   ];
 
   const filteredRecent = useMemo(() => {
@@ -150,45 +142,45 @@ export default function AdminDashboardPage() {
       {/* Widgets */}
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {/* Weather */}
-        <Card title="Météo">
+        <Card title={t("dashboard_weather")}>
           <p className="text-xs font-semibold">{weather.location}</p>
           <p className="mt-2 text-3xl font-extrabold">{weather.now}</p>
           <p className="text-xs text-gray-600">{weather.condition}</p>
 
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <MiniStat label="Vent" value={weather.wind} />
-            <MiniStat label="Humidité" value={weather.humidity} />
+            <MiniStat label={t("dashboard_wind")} value={weather.wind} />
+            <MiniStat label={t("dashboard_humidity")} value={weather.humidity} />
           </div>
         </Card>
 
         {/* Sensors + chart */}
         <Card
-          title="Santé capteurs"
-          right={<TrendSelector range={range} setRange={setRange} />}
+          title={t("dashboard_sensors_health")}
+          right={<TrendSelector range={range} setRange={setRange} t={t} />}
         >
           <div className="grid grid-cols-2 gap-2">
-            <MiniStat label="En ligne" value={`${sensorHealth.online}`} />
-            <MiniStat label="Hors ligne" value={`${sensorHealth.offline}`} />
-            <MiniStat label="Dernière sync" value={sensorHealth.lastIngest} />
-            <MiniStat label="Batterie faible" value={`${sensorHealth.lowBattery}`} />
+            <MiniStat label={t("dashboard_online")} value={`${sensorHealth.online}`} />
+            <MiniStat label={t("dashboard_offline")} value={`${sensorHealth.offline}`} />
+            <MiniStat label={t("dashboard_last_sync")} value={sensorHealth.lastIngest} />
+            <MiniStat label={t("dashboard_low_battery")} value={`${sensorHealth.lowBattery}`} />
           </div>
 
           <div className="mt-3">
             <SoilMoistureLineChart data={moistureData} />
             <p className="mt-1 text-[11px] text-gray-500">
-              Humidité du sol (%) — {range}
+              {t("dashboard_moisture_label")} — {range}
             </p>
           </div>
         </Card>
 
         {/* Alerts */}
         <Card
-          title="Alertes système"
-          right={<AlertFilters filter={alertFilter} setFilter={setAlertFilter} />}
+          title={t("dashboard_alerts")}
+          right={<AlertFilters filter={alertFilter} setFilter={setAlertFilter} t={t} />}
         >
           {filteredAlerts.length === 0 ? (
             <div className="rounded-sm border border-dashed p-3 text-xs text-gray-500">
-              Aucune alerte trouvée.
+              {t("dashboard_no_alerts")}
             </div>
           ) : (
             filteredAlerts.map((a) => (
@@ -200,7 +192,7 @@ export default function AdminDashboardPage() {
 
       {/* Activity */}
       <section>
-        <Card title="Dernières activités">
+        <Card title={t("dashboard_activity")}>
           <div className="space-y-2">
             {filteredRecent.map((r) => (
               <div key={r.id} className="rounded-sm bg-gray-50 p-2">
@@ -280,9 +272,11 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 function AlertFilters({
   filter,
   setFilter,
+  t,
 }: {
   filter: "all" | AlertLevel;
   setFilter: (v: "all" | AlertLevel) => void;
+  t: (k: string) => string;
 }) {
   return (
     <select
@@ -290,10 +284,10 @@ function AlertFilters({
       onChange={(e) => setFilter(e.target.value as "all" | AlertLevel)}
       className="rounded-sm border px-2 py-1 text-[11px]"
     >
-      <option value="all">All</option>
-      <option value="critical">Critical</option>
-      <option value="warning">Warning</option>
-      <option value="info">Info</option>
+      <option value="all">{t("dashboard_alert_all")}</option>
+      <option value="critical">{t("dashboard_alert_critical")}</option>
+      <option value="warning">{t("dashboard_alert_warning")}</option>
+      <option value="info">{t("dashboard_alert_info")}</option>
     </select>
   );
 }
@@ -301,9 +295,11 @@ function AlertFilters({
 function TrendSelector({
   range,
   setRange,
+  t,
 }: {
   range: RangeKey;
   setRange: (r: RangeKey) => void;
+  t: (k: string) => string;
 }) {
   return (
     <select
@@ -311,9 +307,9 @@ function TrendSelector({
       onChange={(e) => setRange(e.target.value as RangeKey)}
       className="rounded-sm border px-2 py-1 text-[11px]"
     >
-      <option value="24h">24h</option>
-      <option value="7d">7d</option>
-      <option value="30d">30d</option>
+      <option value="24h">{t("dashboard_range_24h")}</option>
+      <option value="7d">{t("dashboard_range_7d")}</option>
+      <option value="30d">{t("dashboard_range_30d")}</option>
     </select>
   );
 }
@@ -346,4 +342,3 @@ function AlertRow({
     </div>
   );
 }
-

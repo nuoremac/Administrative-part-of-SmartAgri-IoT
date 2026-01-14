@@ -47,6 +47,7 @@ export function setThemeStore(next: Theme) {
   cache = next;
   if (!hasWindow()) return;
   localStorage.setItem(LS_KEY, next);
+  applyThemeToHtml(next);
   window.dispatchEvent(new Event(EVT));
 }
 

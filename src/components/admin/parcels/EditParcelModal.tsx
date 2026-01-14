@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ParcelRow } from "@/lib/mockParcels";
+import { useT } from "@/components/i18n/useT";
 
 export default function EditParcelModal({
   open,
@@ -14,6 +15,7 @@ export default function EditParcelModal({
   onClose: () => void;
   onSave: (patch: { name: string; owner: string; area: number; sensors: number }) => void;
 }) {
+  const { t } = useT();
   // ✅ hooks always run; modal returns null after hooks
   const defaults = useMemo(
     () => ({
@@ -40,10 +42,10 @@ export default function EditParcelModal({
     const a = Number(area);
     const s = Number(sensors);
 
-    if (!name.trim()) return setError("Le nom est obligatoire.");
-    if (!owner.trim()) return setError("Le propriétaire est obligatoire.");
-    if (!Number.isFinite(a) || a <= 0) return setError("Superficie invalide (m²).");
-    if (!Number.isFinite(s) || s < 0) return setError("Nombre de capteurs invalide.");
+    if (!name.trim()) return setError(t("parcel_error_name"));
+    if (!owner.trim()) return setError(t("parcel_error_owner"));
+    if (!Number.isFinite(a) || a <= 0) return setError(t("parcel_error_area"));
+    if (!Number.isFinite(s) || s < 0) return setError(t("parcel_error_sensors"));
 
     onSave({ name: name.trim(), owner: owner.trim(), area: Math.round(a), sensors: Math.round(s) });
   };
@@ -65,7 +67,7 @@ export default function EditParcelModal({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Modifier la parcelle
+              {t("edit_parcel_title")}
             </p>
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
               ID: <span className="font-semibold">{parcel.id}</span>
@@ -83,7 +85,7 @@ export default function EditParcelModal({
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Nom">
+          <Field label={t("table_name")}>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -92,7 +94,7 @@ export default function EditParcelModal({
             />
           </Field>
 
-          <Field label="Propriétaire">
+          <Field label={t("table_owner")}>
             <input
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
@@ -101,7 +103,7 @@ export default function EditParcelModal({
             />
           </Field>
 
-          <Field label="Superficie (m²)">
+          <Field label={t("terrain_area")}>
             <input
               value={area}
               onChange={(e) => setArea(e.target.value)}
@@ -111,7 +113,7 @@ export default function EditParcelModal({
             />
           </Field>
 
-          <Field label="Nombre capteurs">
+          <Field label={t("table_sensors")}>
             <input
               value={sensors}
               onChange={(e) => setSensors(e.target.value)}
@@ -135,14 +137,14 @@ export default function EditParcelModal({
             className="h-9 rounded-sm border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50
                        dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-200"
           >
-            Annuler
+            {t("cancel")}
           </button>
           <button
             type="button"
             onClick={submit}
             className="h-9 rounded-sm bg-green-600 px-3 text-xs font-semibold text-white hover:bg-green-700"
           >
-            Enregistrer
+            {t("save")}
           </button>
         </div>
       </div>

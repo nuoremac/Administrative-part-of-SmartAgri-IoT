@@ -30,25 +30,19 @@ export default function LoginPage() {
     setInfo(null);
     setLoading(true);
 
-    // small delay to make loading visible (optional)
-    // setTimeout(() => {
-    const user = mockAdminLogin(email, code);
+    try {
+      const user = mockAdminLogin(email.trim(), code.trim());
 
-      try {
-        console.log("Submitting login:", { email, code }); // debug
-
-        const user = mockAdminLogin(email.trim(), code.trim());
-
-        if (!user) {
-          setError(t("invalidCredentials"));
-          return;
-        }
-
-        saveUser(user);
-        router.push("/admin/dashboard");
-      } finally {
-        setLoading(false); //  ALWAYS reset loading
+      if (!user) {
+        setError(t("invalidCredentials"));
+        return;
       }
+
+      saveUser(user);
+      router.push("/admin/dashboard");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleForgotCode = () => {
@@ -104,7 +98,7 @@ export default function LoginPage() {
 
           {/* Title */}
           <h1 className="mb-4 text-center text-xl font-semibold text-gray-900">
-            {t("loginAdminTitle") !== "loginAdminTitle" ? t("loginAdminTitle") : "Connexion"}
+            {t("loginAdminTitle")}
           </h1>
 
           {/* ✅ Inline feedback messages */}
@@ -133,7 +127,7 @@ export default function LoginPage() {
                   setError(null);
                   setInfo(null);
                 }}
-                placeholder={lang === "fr" ? "ex: admin@smartagro.com" : "e.g. admin@smartagro.com"}
+                placeholder={t("emailPlaceholder")}
                 className="w-full rounded-md border border-gray-600 px-3 py-2 text-gray-900 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
                 required
               />
@@ -142,20 +136,19 @@ export default function LoginPage() {
             {/* Code sécurité + eye toggle */}
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                {t("adminCode") !== "adminCode" ? t("adminCode") : "Code sécurité"}
+                {t("adminCode")}
               </label>
 
               <div className="relative">
                 <input
-                  // ✅ FIX: showCode=true => text, false => password
-                  type={!showCode ? "text" : "password"}
+                  type={showCode ? "text" : "password"}
                   value={code}
                   onChange={(e) => {
                     setCode(e.target.value);
                     setError(null);
                     setInfo(null);
                   }}
-                  placeholder="••••••"
+                  placeholder={t("adminCodePlaceholder")}
                   className="w-full rounded-md border border-gray-200 px-3 py-2 pr-10 text-gray-900 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
                   required
                 />
@@ -219,7 +212,7 @@ export default function LoginPage() {
               disabled={loading}
               className="mt-2 w-full rounded-md bg-green-600 py-2.5 text-sm font-semibold text-white shadow hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {loading ? (lang === "fr" ? "Connexion..." : "Signing in...") : t("signIn")}
+              {loading ? t("signInLoading") : t("signIn")}
             </button>
           </form>
         </div>
@@ -227,7 +220,6 @@ export default function LoginPage() {
     </main>
   );
 }
-
 
 
 

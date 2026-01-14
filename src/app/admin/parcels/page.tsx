@@ -1,41 +1,61 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useToast } from "@/components/ui/ToastProvider";
-import { useRouter } from "next/navigation";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useT } from "@/components/i18n/useT";
 import {
   deleteParcel,
   listParcels,
   restoreParcel,
   type ParcelRow,
 } from "@/lib/mockParcels";
+import { listTerrains } from "@/lib/mockTerrains";
 
-type SortKey = "id" | "owner" | "area" | "sensors";
+type SortKey = "id" | "name" | "owner" | "area" | "sensors" | "terrainId";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
 
 function useIsClient() {
   return useSyncExternalStore(
-    () => () => {}, // no-op subscribe
-    () => true,     // client snapshot
-    () => false     // server snapshot
+    () => () => {},
+    () => true,
+    () => false
   );
 }
 
-
 export default function ParcelsPage() {
+  const router = useRouter();
+  const { query, setQuery } = useAdminSearch();
+  const { push } = useToast();
+  const { t } = useT();
   const isClient = useIsClient();
 
-
-  const { query, setQuery } = useAdminSearch(); // global search
-  const { push } = useToast();
-
-  const [rows, setRows] = useState<ParcelRow[]>(() => listParcels());
   const [page, setPage] = useState(1);
-
   const [sortKey, setSortKey] = useState<SortKey>("id");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [confirmParcel, setConfirmParcel] = useState<ParcelRow | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const terrainMap = useMemo(() => {
+    const rows = listTerrains().items;
+    return new Map(rows.map((tRow) => [tRow.id, tRow.name]));
+  }, []);
+
+  const listResult = useMemo(() => {
+    return listParcels({
+      search: query,
+      sortKey,
+      sortDir,
+      skip: (page - 1) * PAGE_SIZE,
+      limit: PAGE_SIZE,
+    });
+  }, [query, sortKey, sortDir, page, refreshKey]);
+
+  const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
+  const safePage = Math.min(Math.max(page, 1), totalPages);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -46,78 +66,37 @@ export default function ParcelsPage() {
     setSortDir((d) => (d === "asc" ? "desc" : "asc"));
   };
 
-  const filteredSorted = useMemo(() => {
-    const s = query.trim().toLowerCase();
-    const filtered = !s
-      ? rows
-      : rows.filter((p) =>
-          [p.id, p.name, p.owner, String(p.area), String(p.sensors)]
-            .join(" ")
-            .toLowerCase()
-            .includes(s)
-        );
-
-    const dir = sortDir === "asc" ? 1 : -1;
-    return [...filtered].sort((a, b) => {
-      if (sortKey === "id") return a.id.localeCompare(b.id) * dir;
-      if (sortKey === "owner") return a.owner.localeCompare(b.owner) * dir;
-      if (sortKey === "area") return (a.area - b.area) * dir;
-      return (a.sensors - b.sensors) * dir;
-    });
-  }, [rows, query, sortKey, sortDir]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE));
-  const safePage = Math.min(Math.max(page, 1), totalPages);
-
-  const paged = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE;
-    return filteredSorted.slice(start, start + PAGE_SIZE);
-  }, [filteredSorted, safePage]);
-
-
-  const router = useRouter();
-  const onConsult = (id: string) => {
-  console.log("Navigate to parcel:", id);
-  router.push(`/admin/parcels/${id}`);
-  };
-
-
-  const onDelete = (p: ParcelRow) => {
-    const removed = deleteParcel(p.id);
+  const confirmDelete = () => {
+    if (!confirmParcel) return;
+    const removed = deleteParcel(confirmParcel.id);
+    setConfirmParcel(null);
     if (!removed) return;
 
-    setRows(listParcels());
+    setRefreshKey((k) => k + 1);
 
     push({
-      title: "Parcelle supprimée",
-      message: `${removed.id} supprimée.`,
-      actionLabel: "Annuler",
+      title: t("delete_toast_title"),
+      message: `${removed.id}`,
+      actionLabel: t("undo"),
       onAction: () => {
         restoreParcel(removed);
-        setRows(listParcels());
-        push({ title: "Suppression annulée", message: `${removed.id} restaurée.`, kind: "success" });
+        setRefreshKey((k) => k + 1);
+        push({ title: t("delete_toast_undo"), message: `${removed.id}`, kind: "success" });
       },
     });
   };
 
-  return (
+  return isClient ? (
     <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
-      {/* header row matching screenshot */}
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
-            <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            {/* Parcelles <span className="text-gray-600 dark:text-gray-400">({rows.length})</span> */}
-            Parcelles{" "}
-              <span className="text-gray-600 dark:text-gray-400" suppressHydrationWarning>
-                ({isClient ? rows.length : 0})
-              </span>
-            </h1>
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-            Superficie en m² • Cliquez sur “Consulter” pour le détail
-            </p>
+          <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+            {t("nav_parcels")}{" "}
+            <span className="text-gray-600 dark:text-gray-400">({listResult.total})</span>
+          </h1>
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("parcels_subtitle")}</p>
         </div>
 
-        {/* optional helper: clear global search */}
         {query ? (
           <button
             type="button"
@@ -125,34 +104,35 @@ export default function ParcelsPage() {
             className="rounded-sm border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
                        dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-200 dark:hover:bg-[#0d1117]"
           >
-            Effacer recherche
+            {t("clear")}
           </button>
         ) : null}
       </div>
 
       <div className="overflow-hidden rounded-sm border border-gray-400 bg-white dark:border-gray-800 dark:bg-[#0d1117]">
         <div className="overflow-x-auto">
-          <table className="min-w-[820px] w-full text-left text-sm">
-            <thead className="bg-white dark:bg-[#0d1117]">
+          <table className="min-w-[980px] w-full text-left text-sm">
+            <thead className="sticky top-0 bg-white dark:bg-[#0d1117]">
               <tr className="border-b border-gray-400 dark:border-gray-800">
-                <ThSortable label="Id Parcelle" active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
-                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">Nom</th>
-                <ThSortable label="Propriétaire" active={sortKey === "owner"} dir={sortDir} onClick={() => toggleSort("owner")} />
-                <ThSortable label="Superficie" active={sortKey === "area"} dir={sortDir} onClick={() => toggleSort("area")} />
-                <ThSortable label="Nombre capteurs" active={sortKey === "sensors"} dir={sortDir} onClick={() => toggleSort("sensors")} />
-                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">Action</th>
+                <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
+                <ThSortable label={t("table_name")} active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
+                <ThSortable label={t("table_owner")} active={sortKey === "owner"} dir={sortDir} onClick={() => toggleSort("owner")} />
+                <ThSortable label={t("table_area")} active={sortKey === "area"} dir={sortDir} onClick={() => toggleSort("area")} />
+                <ThSortable label={t("table_sensors")} active={sortKey === "sensors"} dir={sortDir} onClick={() => toggleSort("sensors")} />
+                <ThSortable label={t("table_terrain")} active={sortKey === "terrainId"} dir={sortDir} onClick={() => toggleSort("terrainId")} />
+                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
               </tr>
             </thead>
 
             <tbody>
-              {paged.length === 0 ? (
+              {listResult.items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
-                    Aucune parcelle trouvée.
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
+                    {t("empty_parcels")}
                   </td>
                 </tr>
               ) : (
-                paged.map((p) => (
+                listResult.items.map((p) => (
                   <tr
                     key={p.id}
                     className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
@@ -162,24 +142,25 @@ export default function ParcelsPage() {
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.owner}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.area} m²</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.sensors}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
+                      {terrainMap.get(p.terrainId) ?? p.terrainId}
+                    </td>
 
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => onConsult(p.id)}
+                          onClick={() => router.push(`/admin/parcels/${p.id}`)}
                           className="rounded-full bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
                         >
-                          Consulter
+                          {t("consult")}
                         </button>
-
-                        {/* optional delete (not in screenshot but admin needs it) */}
                         <button
                           type="button"
-                          onClick={() => onDelete(p)}
+                          onClick={() => setConfirmParcel(p)}
                           className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
                         >
-                          Supprimer
+                          {t("delete")}
                         </button>
                       </div>
                     </td>
@@ -190,18 +171,29 @@ export default function ParcelsPage() {
           </table>
         </div>
 
-        {/* pagination footer */}
         <div className="flex flex-col gap-2 border-t border-gray-200 bg-white px-4 py-3 text-xs text-gray-600 sm:flex-row sm:items-center sm:justify-between
                         dark:border-gray-800 dark:bg-[#0d1117] dark:text-gray-400">
           <span>
-            Page <span className="font-semibold">{safePage}</span> / {totalPages} •{" "}
-            <span className="font-semibold">{filteredSorted.length}</span> résultats
+            {t("pagination_page")} <span className="font-semibold">{safePage}</span> / {totalPages} •{" "}
+            <span className="font-semibold">{listResult.total}</span> {t("pagination_results")}
           </span>
 
-          <Pagination page={safePage} totalPages={totalPages} onChange={setPage} />
+          <Pagination page={safePage} totalPages={totalPages} onChange={(p) => setPage(p)} />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!confirmParcel}
+        title={t("delete_confirm_title")}
+        message={t("delete_confirm_body")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("cancel")}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmParcel(null)}
+      />
     </div>
+  ) : (
+    <ParcelsSkeleton />
   );
 }
 
@@ -276,6 +268,23 @@ function Pagination({
       >
         Next
       </button>
+    </div>
+  );
+}
+
+function ParcelsSkeleton() {
+  return (
+    <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
+      <div className="mb-3 flex items-end justify-between gap-2">
+        <div>
+          <div className="h-4 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+          <div className="mt-2 h-3 w-56 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+        </div>
+        <div className="h-7 w-20 animate-pulse rounded-sm bg-gray-200 dark:bg-gray-800" />
+      </div>
+      <div className="overflow-hidden rounded-sm border border-gray-300 bg-white shadow-sm dark:border-gray-800 dark:bg-[#0d1117]">
+        <div className="h-[360px] w-full animate-pulse bg-gray-100 dark:bg-[#161b22]" />
+      </div>
     </div>
   );
 }
