@@ -12,24 +12,44 @@ function toDraft(initial: UserRow | null | undefined, mode: Mode): UserDraft {
 
   if (mode === "create" && !initial) {
     return {
-      name: "",
+      nom: "",
+      prenom: "",
       email: "",
-      tel: "",
-      parcels: 0,
-      role: "FARMER",
+      telephone: "",
+      role: "user",
+      preferences: {
+        langue: "fr",
+        theme: "light",
+        notifications: { email: true, push: true, sms: false },
+        unites: { temperature: "celsius", surface: "hectare", precipitation: "mm" },
+      },
       status: "active",
-      lastActivity: nowIso,
+      avatar: "",
+      date_inscription: nowIso,
+      dernier_acces: nowIso,
+      created_at: nowIso,
+      updated_at: nowIso,
     };
   }
 
   return {
-    name: initial?.name ?? "",
+    nom: initial?.nom ?? "",
+    prenom: initial?.prenom ?? "",
     email: initial?.email ?? "",
-    tel: initial?.tel ?? "",
-    parcels: initial?.parcels ?? 0,
-    role: (initial?.role ?? "FARMER") as UserRole,
+    telephone: initial?.telephone ?? "",
+    role: (initial?.role ?? "user") as UserRole,
+    preferences: initial?.preferences ?? {
+      langue: "fr",
+      theme: "light",
+      notifications: { email: true, push: true, sms: false },
+      unites: { temperature: "celsius", surface: "hectare", precipitation: "mm" },
+    },
     status: (initial?.status ?? "active") as UserStatus,
-    lastActivity: initial?.lastActivity ?? nowIso,
+    avatar: initial?.avatar ?? "",
+    date_inscription: initial?.date_inscription ?? nowIso,
+    dernier_acces: initial?.dernier_acces ?? nowIso,
+    created_at: initial?.created_at ?? nowIso,
+    updated_at: initial?.updated_at ?? nowIso,
   };
 }
 
@@ -81,16 +101,24 @@ export default function UserModal({
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Nom">
             <input
-              value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              value={form.nom}
+              onChange={(e) => setForm((p) => ({ ...p, nom: e.target.value }))}
+              className={inputCls}
+            />
+          </Field>
+
+          <Field label="Prénom">
+            <input
+              value={form.prenom}
+              onChange={(e) => setForm((p) => ({ ...p, prenom: e.target.value }))}
               className={inputCls}
             />
           </Field>
 
           <Field label="Téléphone">
             <input
-              value={form.tel}
-              onChange={(e) => setForm((p) => ({ ...p, tel: e.target.value }))}
+              value={form.telephone}
+              onChange={(e) => setForm((p) => ({ ...p, telephone: e.target.value }))}
               className={inputCls}
             />
           </Field>
@@ -99,17 +127,6 @@ export default function UserModal({
             <input
               value={form.email}
               onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-              className={inputCls}
-            />
-          </Field>
-
-          <Field label="Parcelles">
-            <input
-              type="number"
-              value={form.parcels}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, parcels: Number(e.target.value || 0) }))
-              }
               className={inputCls}
             />
           </Field>
@@ -124,7 +141,7 @@ export default function UserModal({
             >
               <option value="active">Actif</option>
               <option value="pending">En attente</option>
-              <option value="blocked">Bloqué</option>
+              <option value="suspended">Suspendu</option>
             </select>
           </Field>
 
@@ -134,8 +151,8 @@ export default function UserModal({
               onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as UserRole }))}
               className={inputCls}
             >
-              <option value="FARMER">Agriculteur</option>
-              <option value="ADMIN">Admin</option>
+              <option value="user">Utilisateur</option>
+              <option value="admin">Admin</option>
             </select>
           </Field>
         </div>
@@ -155,11 +172,11 @@ export default function UserModal({
             onClick={() =>
               onSubmit({
                 ...form,
-                name: form.name.trim(),
+                nom: form.nom.trim(),
+                prenom: form.prenom.trim(),
                 email: form.email.trim(),
-                tel: form.tel.trim(),
-                parcels: Number.isFinite(form.parcels) ? form.parcels : 0,
-                lastActivity: new Date().toISOString(),
+                telephone: form.telephone.trim(),
+                updated_at: new Date().toISOString(),
               })
             }
             className="h-9 rounded-sm bg-green-600 px-4 text-xs font-semibold text-white hover:bg-green-700"

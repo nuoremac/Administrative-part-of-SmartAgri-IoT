@@ -6,10 +6,10 @@ import { formatLocalite, type Localite } from "@/lib/mockLocalites";
 import type { TerrainRow } from "@/lib/mockTerrains";
 
 type FormState = {
-  name: string;
-  owner: string;
-  area: string;
-  localiteId: string;
+  nom: string;
+  user_id: string;
+  superficie_totale: string;
+  localite_id: string;
 };
 
 export default function TerrainModal({
@@ -26,16 +26,16 @@ export default function TerrainModal({
   initial: TerrainRow | null;
   localites: Localite[];
   onClose: () => void;
-  onSubmit: (data: { name: string; owner: string; area: number; localiteId: string }) => void;
+  onSubmit: (data: { nom: string; user_id: string; superficie_totale: number; localite_id: string }) => void;
   onAddLocalite: () => void;
 }) {
   const { t } = useT();
   const initialForm = useMemo(
     () => ({
-      name: initial?.name ?? "",
-      owner: initial?.owner ?? "",
-      area: initial?.area ? String(initial.area) : "",
-      localiteId: initial?.localiteId ?? (localites[0]?.id ?? ""),
+      nom: initial?.nom ?? "",
+      user_id: initial?.user_id ?? "",
+      superficie_totale: initial?.superficie_totale ? String(initial.superficie_totale) : "",
+      localite_id: initial?.localite_id ?? (localites[0]?.id ?? ""),
     }),
     [initial, localites]
   );
@@ -58,8 +58,8 @@ export default function TerrainModal({
           <label className="block">
             <span className="mb-1 block font-semibold">{t("terrain_name")}</span>
             <input
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              value={form.nom}
+              onChange={(e) => setForm((f) => ({ ...f, nom: e.target.value }))}
               className="h-9 w-full rounded-sm border border-gray-300 px-2 outline-none focus:border-green-600
                          dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
             />
@@ -68,8 +68,8 @@ export default function TerrainModal({
           <label className="block">
             <span className="mb-1 block font-semibold">{t("terrain_owner")}</span>
             <input
-              value={form.owner}
-              onChange={(e) => setForm((f) => ({ ...f, owner: e.target.value }))}
+              value={form.user_id}
+              onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
               className="h-9 w-full rounded-sm border border-gray-300 px-2 outline-none focus:border-green-600
                          dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
             />
@@ -78,8 +78,8 @@ export default function TerrainModal({
           <label className="block">
             <span className="mb-1 block font-semibold">{t("terrain_area")}</span>
             <input
-              value={form.area}
-              onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))}
+              value={form.superficie_totale}
+              onChange={(e) => setForm((f) => ({ ...f, superficie_totale: e.target.value }))}
               className="h-9 w-full rounded-sm border border-gray-300 px-2 outline-none focus:border-green-600
                          dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
             />
@@ -98,8 +98,8 @@ export default function TerrainModal({
               </button>
             </div>
             <select
-              value={form.localiteId}
-              onChange={(e) => setForm((f) => ({ ...f, localiteId: e.target.value }))}
+              value={form.localite_id}
+              onChange={(e) => setForm((f) => ({ ...f, localite_id: e.target.value }))}
               className="h-9 w-full rounded-sm border border-gray-300 bg-white px-2 text-xs outline-none focus:border-green-600
                          dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
             >
@@ -129,10 +129,10 @@ export default function TerrainModal({
             type="button"
             onClick={() =>
               onSubmit({
-                name: form.name.trim(),
-                owner: form.owner.trim(),
-                area: Number(form.area) || 0,
-                localiteId: form.localiteId,
+                nom: form.nom.trim(),
+                user_id: form.user_id.trim(),
+                superficie_totale: Number(form.superficie_totale) || 0,
+                localite_id: form.localite_id,
               })
             }
             className="rounded-sm bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"

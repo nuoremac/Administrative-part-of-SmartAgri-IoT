@@ -13,24 +13,22 @@ export default function EditParcelModal({
   open: boolean;
   parcel: ParcelRow;
   onClose: () => void;
-  onSave: (patch: { name: string; owner: string; area: number; sensors: number }) => void;
+  onSave: (patch: { nom: string; superficie: number; nombre_capteurs: number }) => void;
 }) {
   const { t } = useT();
   // ✅ hooks always run; modal returns null after hooks
   const defaults = useMemo(
     () => ({
-      name: parcel.name ?? "",
-      owner: parcel.owner ?? "",
-      area: parcel.area ?? 0,
-      sensors: parcel.sensors ?? 0,
+      nom: parcel.nom ?? "",
+      superficie: parcel.superficie ?? 0,
+      nombre_capteurs: parcel.nombre_capteurs ?? 0,
     }),
     [parcel]
   );
 
-  const [name, setName] = useState(defaults.name);
-  const [owner, setOwner] = useState(defaults.owner);
-  const [area, setArea] = useState(String(defaults.area));
-  const [sensors, setSensors] = useState(String(defaults.sensors));
+  const [nom, setNom] = useState(defaults.nom);
+  const [superficie, setSuperficie] = useState(String(defaults.superficie));
+  const [capteurs, setCapteurs] = useState(String(defaults.nombre_capteurs));
   const [error, setError] = useState<string | null>(null);
 
   // reset when parcel changes (key-based remount used by parent)
@@ -39,15 +37,14 @@ export default function EditParcelModal({
   const submit = () => {
     setError(null);
 
-    const a = Number(area);
-    const s = Number(sensors);
+    const a = Number(superficie);
+    const s = Number(capteurs);
 
-    if (!name.trim()) return setError(t("parcel_error_name"));
-    if (!owner.trim()) return setError(t("parcel_error_owner"));
+    if (!nom.trim()) return setError(t("parcel_error_name"));
     if (!Number.isFinite(a) || a <= 0) return setError(t("parcel_error_area"));
     if (!Number.isFinite(s) || s < 0) return setError(t("parcel_error_sensors"));
 
-    onSave({ name: name.trim(), owner: owner.trim(), area: Math.round(a), sensors: Math.round(s) });
+    onSave({ nom: nom.trim(), superficie: Math.round(a), nombre_capteurs: Math.round(s) });
   };
 
   if (!open) return null;
@@ -87,17 +84,8 @@ export default function EditParcelModal({
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label={t("table_name")}>
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
-                         focus:border-green-600 dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
-            />
-          </Field>
-
-          <Field label={t("table_owner")}>
-            <input
-              value={owner}
-              onChange={(e) => setOwner(e.target.value)}
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
               className="h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
                          focus:border-green-600 dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
             />
@@ -105,8 +93,8 @@ export default function EditParcelModal({
 
           <Field label={t("terrain_area")}>
             <input
-              value={area}
-              onChange={(e) => setArea(e.target.value)}
+              value={superficie}
+              onChange={(e) => setSuperficie(e.target.value)}
               inputMode="numeric"
               className="h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
                          focus:border-green-600 dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
@@ -115,8 +103,8 @@ export default function EditParcelModal({
 
           <Field label={t("table_sensors")}>
             <input
-              value={sensors}
-              onChange={(e) => setSensors(e.target.value)}
+              value={capteurs}
+              onChange={(e) => setCapteurs(e.target.value)}
               inputMode="numeric"
               className="h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
                          focus:border-green-600 dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"

@@ -14,7 +14,7 @@ import {
 } from "@/lib/mockParcels";
 import { listTerrains } from "@/lib/mockTerrains";
 
-type SortKey = "id" | "name" | "owner" | "area" | "sensors" | "terrainId";
+type SortKey = "id" | "nom" | "code" | "type_sol" | "culture_actuelle" | "superficie" | "nombre_capteurs" | "terrain_id";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
 
@@ -41,7 +41,7 @@ export default function ParcelsPage() {
 
   const terrainMap = useMemo(() => {
     const rows = listTerrains().items;
-    return new Map(rows.map((tRow) => [tRow.id, tRow.name]));
+    return new Map(rows.map((tRow) => [tRow.id, tRow.nom]));
   }, []);
 
   const listResult = useMemo(() => {
@@ -115,11 +115,13 @@ export default function ParcelsPage() {
             <thead className="sticky top-0 bg-white dark:bg-[#0d1117]">
               <tr className="border-b border-gray-400 dark:border-gray-800">
                 <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
-                <ThSortable label={t("table_name")} active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
-                <ThSortable label={t("table_owner")} active={sortKey === "owner"} dir={sortDir} onClick={() => toggleSort("owner")} />
-                <ThSortable label={t("table_area")} active={sortKey === "area"} dir={sortDir} onClick={() => toggleSort("area")} />
-                <ThSortable label={t("table_sensors")} active={sortKey === "sensors"} dir={sortDir} onClick={() => toggleSort("sensors")} />
-                <ThSortable label={t("table_terrain")} active={sortKey === "terrainId"} dir={sortDir} onClick={() => toggleSort("terrainId")} />
+                <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
+                <ThSortable label={t("table_code")} active={sortKey === "code"} dir={sortDir} onClick={() => toggleSort("code")} />
+                <ThSortable label={t("table_soil_type")} active={sortKey === "type_sol"} dir={sortDir} onClick={() => toggleSort("type_sol")} />
+                <ThSortable label={t("table_current_crop")} active={sortKey === "culture_actuelle"} dir={sortDir} onClick={() => toggleSort("culture_actuelle")} />
+                <ThSortable label={t("table_area")} active={sortKey === "superficie"} dir={sortDir} onClick={() => toggleSort("superficie")} />
+                <ThSortable label={t("table_sensors")} active={sortKey === "nombre_capteurs"} dir={sortDir} onClick={() => toggleSort("nombre_capteurs")} />
+                <ThSortable label={t("table_terrain")} active={sortKey === "terrain_id"} dir={sortDir} onClick={() => toggleSort("terrain_id")} />
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
               </tr>
             </thead>
@@ -127,7 +129,7 @@ export default function ParcelsPage() {
             <tbody>
               {listResult.items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
                     {t("empty_parcels")}
                   </td>
                 </tr>
@@ -138,12 +140,14 @@ export default function ParcelsPage() {
                     className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                   >
                     <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{p.id}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.name}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.owner}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.area} m²</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.sensors}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nom}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.type_sol}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.culture_actuelle}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie} m²</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nombre_capteurs}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                      {terrainMap.get(p.terrainId) ?? p.terrainId}
+                      {terrainMap.get(p.terrain_id) ?? p.terrain_id}
                     </td>
 
                     <td className="px-4 py-3">

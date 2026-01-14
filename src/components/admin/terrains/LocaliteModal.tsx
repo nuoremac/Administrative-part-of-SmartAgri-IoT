@@ -4,9 +4,9 @@ import { useState } from "react";
 import { useT } from "@/components/i18n/useT";
 
 type FormState = {
-  name: string;
-  city: string;
-  country: string;
+  nom: string;
+  ville: string;
+  pays: string;
 };
 
 export default function LocaliteModal({
@@ -19,7 +19,7 @@ export default function LocaliteModal({
   onSubmit: (data: FormState) => void;
 }) {
   const { t } = useT();
-  const [form, setForm] = useState<FormState>({ name: "", city: "", country: "" });
+  const [form, setForm] = useState<FormState>({ nom: "", ville: "", pays: "" });
 
   if (!open) return null;
 
@@ -31,8 +31,8 @@ export default function LocaliteModal({
           <label className="block">
             <span className="mb-1 block font-semibold">{t("locality_name")}</span>
             <input
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              value={form.nom}
+              onChange={(e) => setForm((f) => ({ ...f, nom: e.target.value }))}
               className="h-9 w-full rounded-sm border border-gray-300 px-2 outline-none focus:border-green-600
                          dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
             />
@@ -40,8 +40,8 @@ export default function LocaliteModal({
           <label className="block">
             <span className="mb-1 block font-semibold">{t("locality_city")}</span>
             <input
-              value={form.city}
-              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+              value={form.ville}
+              onChange={(e) => setForm((f) => ({ ...f, ville: e.target.value }))}
               className="h-9 w-full rounded-sm border border-gray-300 px-2 outline-none focus:border-green-600
                          dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
             />
@@ -49,8 +49,8 @@ export default function LocaliteModal({
           <label className="block">
             <span className="mb-1 block font-semibold">{t("locality_country")}</span>
             <input
-              value={form.country}
-              onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
+              value={form.pays}
+              onChange={(e) => setForm((f) => ({ ...f, pays: e.target.value }))}
               className="h-9 w-full rounded-sm border border-gray-300 px-2 outline-none focus:border-green-600
                          dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
             />

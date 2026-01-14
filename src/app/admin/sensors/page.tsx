@@ -11,28 +11,29 @@ import {
   listSensors,
   restoreSensor,
   type SensorRow,
-  type SensorStatus,
 } from "@/lib/mockSensors";
+import { getLatestMeasurement } from "@/lib/mockSensorData";
+import { getParcel } from "@/lib/mockParcels";
 
-type SortKey = "id" | "name" | "status" | "lastMeasure" | "parcels";
+type SortKey = "id" | "nom" | "dev_eui" | "parcelle_id";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
 
-function statusLabel(status: SensorStatus, t: (k: string) => string) {
-  if (status === "ok") return t("status_ok");
-  if (status === "warning") return t("status_warning");
+function statusLabel(level: "ok" | "warning" | "offline", t: (k: string) => string) {
+  if (level === "ok") return t("status_ok");
+  if (level === "warning") return t("status_warning");
   return t("status_offline");
 }
 
-function StatusBadge({ status, t }: { status: SensorStatus; t: (k: string) => string }) {
+function StatusBadge({ level, t }: { level: "ok" | "warning" | "offline"; t: (k: string) => string }) {
   const cls =
-    status === "ok"
+    level === "ok"
       ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
-      : status === "warning"
+      : level === "warning"
       ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200"
       : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200";
 
-  return <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${cls}`}>{statusLabel(status, t)}</span>;
+  return <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${cls}`}>{statusLabel(level, t)}</span>;
 }
 
 export default function SensorsPage() {
@@ -118,10 +119,9 @@ export default function SensorsPage() {
             <thead className="sticky top-0 bg-white dark:bg-[#0d1117]">
               <tr className="border-b border-gray-400 dark:border-gray-800">
                 <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
-                <ThSortable label={t("table_name")} active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
-                <ThSortable label={t("table_status")} active={sortKey === "status"} dir={sortDir} onClick={() => toggleSort("status")} />
-                <ThSortable label={t("table_last_measure")} active={sortKey === "lastMeasure"} dir={sortDir} onClick={() => toggleSort("lastMeasure")} />
-                <ThSortable label={t("table_parcels")} active={sortKey === "parcels"} dir={sortDir} onClick={() => toggleSort("parcels")} />
+                <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
+                <ThSortable label="DevEUI" active={sortKey === "dev_eui"} dir={sortDir} onClick={() => toggleSort("dev_eui")} />
+                <ThSortable label={t("table_parcels")} active={sortKey === "parcelle_id"} dir={sortDir} onClick={() => toggleSort("parcelle_id")} />
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
               </tr>
             </thead>
@@ -134,18 +134,20 @@ export default function SensorsPage() {
                   </td>
                 </tr>
               ) : (
-                listResult.items.map((s) => (
+                listResult.items.map((s) => {
+                  const latest = getLatestMeasurement({ capteur_id: s.id, parcelle_id: s.parcelle_id });
+                  const level: "ok" | "warning" | "offline" =
+                    !latest ? "offline" : latest.humidity < 35 ? "warning" : "ok";
+                  const parcel = getParcel(s.parcelle_id);
+                  return (
                   <tr
                     key={s.id}
                     className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                   >
                     <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{s.id}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.name}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={s.status} t={t} />
-                    </td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.lastMeasure}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.parcels.length}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.nom}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.dev_eui}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{parcel?.nom ?? s.parcelle_id}</td>
 
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -166,7 +168,8 @@ export default function SensorsPage() {
                       </div>
                     </td>
                   </tr>
-                ))
+                );
+                })
               )}
             </tbody>
           </table>

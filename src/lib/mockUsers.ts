@@ -1,20 +1,38 @@
 import { applyListParams, readFromStorage, writeToStorage, type ListParams, type ListResult } from "./mockStore";
 
-export type UserStatus = "active" | "pending" | "blocked";
-export type UserRole = "FARMER" | "ADMIN";
+export type UserStatus = "active" | "pending" | "suspended";
+export type UserRole = "user" | "admin";
 
 export type UserRow = {
   id: string;
-  name: string;
+  nom: string;
+  prenom: string;
   email: string;
-  tel: string;
-  parcels: number;
+  telephone: string;
   role: UserRole;
+  preferences: {
+    langue: "fr" | "en";
+    theme: "light" | "dark";
+    notifications: {
+      email: boolean;
+      push: boolean;
+      sms: boolean;
+    };
+    unites: {
+      temperature: "celsius" | "fahrenheit";
+      surface: "hectare" | "m2";
+      precipitation: "mm" | "in";
+    };
+  };
   status: UserStatus;
-  lastActivity: string; // ISO string
+  avatar: string;
+  date_inscription: string;
+  dernier_acces: string;
+  created_at: string;
+  updated_at: string;
 };
 
-const LS_KEY = "smartagro_users_v1";
+const LS_KEY = "smartagro_users_v2";
 
 function seed(): UserRow[] {
   // 30 users so pagination makes sense
@@ -27,20 +45,40 @@ function seed(): UserRow[] {
   const now = Date.now();
   return baseNames.map((name, i) => {
     const id = `u${i + 1}`;
-    const email = `${name.toLowerCase()}@smartagro.com`;
-    const tel = `6${50 + (i % 5)} ${(10 + i) % 100} ${(20 + i * 2) % 100} ${(30 + i * 3) % 100}`.replace(
+    const prenom = name;
+    const nom = i % 3 === 0 ? "Ngassa" : i % 3 === 1 ? "Kouam" : "Manga";
+    const email = `${prenom.toLowerCase()}@smartagro.com`;
+    const telephone = `6${50 + (i % 5)} ${(10 + i) % 100} ${(20 + i * 2) % 100} ${(30 + i * 3) % 100}`.replace(
       /(\d)(\d{2}) (\d{2}) (\d{2})/g,
       "$1$2 $3 $4"
     );
-    const parcels = (i % 10) + 1;
+    const status: UserStatus = i % 11 === 0 ? "suspended" : i % 7 === 0 ? "pending" : "active";
+    const role: UserRole = i % 12 === 0 ? "admin" : "user";
 
-    const status: UserStatus = i % 11 === 0 ? "blocked" : i % 7 === 0 ? "pending" : "active";
-    const role: UserRole = "FARMER";
+    const created_at = new Date(now - (i % 14) * 24 * 60 * 60 * 1000).toISOString();
+    const updated_at = new Date(now - (i % 6) * 60 * 60 * 1000).toISOString();
+    const dernier_acces = new Date(now - (i % 8) * 60 * 60 * 1000).toISOString();
 
-    // last activity spread over last 14 days
-    const lastActivity = new Date(now - (i % 14) * 24 * 60 * 60 * 1000 - (i % 8) * 60 * 60 * 1000).toISOString();
-
-    return { id, name, email, tel, parcels, role, status, lastActivity };
+    return {
+      id,
+      nom,
+      prenom,
+      email,
+      telephone,
+      role,
+      preferences: {
+        langue: i % 2 === 0 ? "fr" : "en",
+        theme: i % 3 === 0 ? "dark" : "light",
+        notifications: { email: true, push: true, sms: false },
+        unites: { temperature: "celsius", surface: "hectare", precipitation: "mm" },
+      },
+      status,
+      avatar: "",
+      date_inscription: created_at,
+      dernier_acces,
+      created_at,
+      updated_at,
+    };
   });
 }
 
@@ -54,7 +92,7 @@ function writeAll(users: UserRow[]) {
 
 export function listUsers(params: ListParams = {}): ListResult<UserRow> {
   const rows = readAll();
-  return applyListParams(rows, params, ["name", "email", "tel", "status", "role"]);
+  return applyListParams(rows, params, ["nom", "prenom", "email", "telephone", "status", "role"]);
 }
 
 export function getUser(id: string): UserRow | undefined {

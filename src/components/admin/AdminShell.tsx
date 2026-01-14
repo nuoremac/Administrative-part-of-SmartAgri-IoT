@@ -82,7 +82,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { query, setQuery, clear } = useAdminSearch();
   const { theme, toggleTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
   const { lang, setLang } = useLang();
   const { t } = useT();
 
@@ -94,9 +93,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     if (!u || u.role !== "ADMIN") router.replace("/login");
   }, [router]);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const nav: NavItem[] = useMemo(
     () => [
@@ -115,27 +111,27 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   };
 
   const Sidebar = (
-    <aside className="flex h-full w-[220px] flex-col bg-green-200">
+    <aside className="flex h-full w-[220px] flex-col bg-green-200 dark:bg-[#0b1220]">
       {/* brand */}
       <div className="flex items-center gap-2 px-3 py-2">
         <div className="relative h-6 w-6 overflow-hidden rounded-full bg-white">
           <Image src="/images/logo.png" alt="logo" fill className="object-cover" />
         </div>
-        <span className="text-sm font-semibold text-green-900">Smart Agro</span>
+        <span className="text-sm font-semibold text-green-900 dark:text-gray-100">Smart Agro</span>
       </div>
 
       {/* admin card */}
       <div className="px-3 pt-2">
-        <div className="rounded-md bg-green-100 px-3 py-3">
+        <div className="rounded-md bg-green-100 px-3 py-3 dark:bg-[#0d1117]">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-sm font-bold text-white">
               A
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-green-950">
+              <p className="truncate text-xs font-semibold text-green-950 dark:text-gray-100">
                 {t("admin_primary")}
               </p>
-              <p className="truncate text-[11px] text-green-900/70">admin</p>
+              <p className="truncate text-[11px] text-green-900/70 dark:text-gray-400">admin</p>
             </div>
           </div>
         </div>
@@ -152,23 +148,24 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               className={[
                 "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold",
                 active
-                  ? "bg-white text-green-900"
-                  : "text-green-950/80 hover:bg-white/70",
+                  ? "bg-white text-green-900 dark:bg-[#0d1117] dark:text-gray-100"
+                  : "text-green-950/80 hover:bg-white/70 dark:text-gray-300 dark:hover:bg-[#0f172a]",
               ].join(" ")}
             >
-              <span className="text-green-900/80">{item.icon}</span>
+              <span className="text-green-900/80 dark:text-gray-200">{item.icon}</span>
               <span>{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="px-3 pb-3">
+      <div className="px-3 pb-15">
         <button
           onClick={logout}
-          className="flex w-full items-center gap-2 rounded-md bg-white/70 px-3 py-2 text-left text-xs font-semibold text-green-900 hover:bg-white"
+          className="flex w-full items-center gap-2 rounded-md bg-white/70 px-3 py-2 text-left text-xs font-semibold text-green-900 hover:bg-white
+                     dark:bg-[#0d1117] dark:text-gray-100 dark:hover:bg-[#0f172a]"
         >
-          <span className="text-green-900/80">
+          <span className="text-green-900/80 dark:text-gray-200">
             <IconLogout />
           </span>
           <span>{t("logout")}</span>
@@ -300,19 +297,19 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 </select>
                 <button
                   type="button"
-                  onClick={() => mounted && toggleTheme()}
+                  onClick={toggleTheme}
                   className="rounded-sm border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
                             dark:border-gray-700 dark:text-gray-100 dark:hover:bg-[#161b22]"
-                  disabled={!mounted}
+                  suppressHydrationWarning
                 >
-                  {mounted ? (theme === "dark" ? t("theme_light") : t("theme_dark")) : t("theme_dark")}
+                  {theme === "dark" ? t("theme_light") : t("theme_dark")}
                 </button>
               </div>
             </header>
 
             {/* Page content */}
             {/* <main className="px-3 py-3 sm:px-4">{children}</main> */}
-            <main className="px-3 py-3 sm:px-4 text-gray-900 dark:text-gray-100">
+            <main className="min-h-[calc(100vh-72px)] bg-[#eef8ee] px-3 py-3 text-gray-900 dark:bg-[#0d1117] dark:text-gray-100 sm:px-4">
               {children}
             </main>
 

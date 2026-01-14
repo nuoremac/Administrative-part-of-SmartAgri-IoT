@@ -1,17 +1,18 @@
 import { applyListParams, readFromStorage, writeToStorage, type ListParams, type ListResult } from "./mockStore";
 
-export type SensorStatus = "ok" | "warning" | "offline";
-
 export type SensorRow = {
-  id: string; // idCapteur
-  name: string; // nom capteur
-  status: SensorStatus; // statut
-  lastMeasure: string; // dernière mesure (text for now)
-  lastMeasureAt: string; // ISO date
-  parcels: string[]; // parcelles associées (IDs)
+  nom: string;
+  dev_eui: string;
+  parcelle_id: string;
+  code: string;
+  date_installation: string;
+  date_activation: string;
+  id: string;
+  created_at: string;
+  updated_at: string;
 };
 
-const LS_KEY = "smartagro:sensors";
+const LS_KEY = "smartagro:sensors:v2";
 const EVT = "smartagro:sensors:changed";
 
 const EMPTY_SENSORS: SensorRow[] = [];
@@ -24,29 +25,22 @@ function hasWindow() {
 }
 
 function seed(): SensorRow[] {
-  // 30 mock sensors with parcel links
   const now = Date.parse("2026-01-02T12:00:00.000Z");
   const parcelsPool = ["P001", "P002", "P003", "P004", "P005", "P006", "P007", "P008", "P009", "P010"];
 
   return Array.from({ length: 30 }, (_, i) => {
     const id = `S-${String(i + 1).padStart(3, "0")}`;
-    const status: SensorStatus = i % 7 === 0 ? "offline" : i % 5 === 0 ? "warning" : "ok";
-    const lastMeasure = i % 2 === 0 ? `${38 + (i % 18)}%` : `${19 + (i % 8)}°C`;
-
-    const lastMeasureAt = new Date(now - (i % 12) * 60 * 60 * 1000).toISOString();
-
-    const linked = [
-      parcelsPool[i % parcelsPool.length],
-      parcelsPool[(i + 3) % parcelsPool.length],
-    ];
-
+    const ts = new Date(now - (i % 12) * 60 * 60 * 1000).toISOString();
     return {
       id,
-      name: `Capteur ${i + 1}`,
-      status,
-      lastMeasure,
-      lastMeasureAt,
-      parcels: Array.from(new Set(linked)),
+      nom: `Capteur ${i + 1}`,
+      dev_eui: `70B3D57ED005E${String(100 + i).padStart(3, "0")}`,
+      parcelle_id: parcelsPool[i % parcelsPool.length],
+      code: `CPT-${String(i + 1).padStart(3, "0")}`,
+      date_installation: ts,
+      date_activation: ts,
+      created_at: ts,
+      updated_at: ts,
     };
   });
 }
@@ -69,7 +63,7 @@ function writeAll(rows: SensorRow[]) {
 // ---- Public API ----
 
 export function listSensors(params: ListParams = {}): ListResult<SensorRow> {
-  return applyListParams(getSensorsSnapshot(), params, ["id", "name", "status", "lastMeasure"]);
+  return applyListParams(getSensorsSnapshot(), params, ["id", "nom", "dev_eui", "parcelle_id", "code"]);
 }
 
 
@@ -77,20 +71,21 @@ export function getSensor(id: string): SensorRow | undefined {
   return getSensorsSnapshot().find((s) => s.id === id);
 }
 
-export function createSensor(input: Omit<SensorRow, "id" | "lastMeasureAt">): SensorRow {
+export function createSensor(input: Omit<SensorRow, "id" | "created_at" | "updated_at">): SensorRow {
   const all = readAll();
   const maxNum = Math.max(0, ...all.map((s) => Number(s.id.replace("S-", "")) || 0));
   const id = `S-${String(maxNum + 1).padStart(3, "0")}`;
-  const sensor: SensorRow = { ...input, id, lastMeasureAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const sensor: SensorRow = { ...input, id, created_at: now, updated_at: now };
   writeAll([sensor, ...all]);
   return sensor;
 }
 
-export function updateSensor(id: string, patch: Partial<Omit<SensorRow, "id">>): SensorRow | null {
+export function updateSensor(id: string, patch: Partial<Omit<SensorRow, "id" | "created_at">>): SensorRow | null {
   const all = readAll();
   const idx = all.findIndex((s) => s.id === id);
   if (idx < 0) return null;
-  const updated = { ...all[idx], ...patch };
+  const updated = { ...all[idx], ...patch, updated_at: new Date().toISOString() };
   all[idx] = updated;
   writeAll(all);
   return updated;

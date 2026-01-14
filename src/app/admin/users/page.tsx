@@ -15,8 +15,10 @@ import {
   updateUser,
   type UserRow,
 } from "@/lib/mockUsers";
+import { listTerrains } from "@/lib/mockTerrains";
+import { listParcels } from "@/lib/mockParcels";
 
-type SortKey = "name" | "parcels";
+type SortKey = "nom";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
 
@@ -28,7 +30,7 @@ export default function AdminUsersPage() {
 
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortKey, setSortKey] = useState<SortKey>("nom");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
 
@@ -56,6 +58,19 @@ export default function AdminUsersPage() {
     });
   }, [q, sortKey, sortDir, page, refreshKey]);
 
+  const parcelsByUser = useMemo(() => {
+    const terrains = listTerrains().items;
+    const parcels = listParcels().items;
+    const terrainOwner = new Map(terrains.map((t) => [t.id, t.user_id]));
+    const counts = new Map<string, number>();
+    parcels.forEach((p) => {
+      const ownerId = terrainOwner.get(p.terrain_id);
+      if (!ownerId) return;
+      counts.set(ownerId, (counts.get(ownerId) ?? 0) + 1);
+    });
+    return counts;
+  }, [refreshKey]);
+
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), totalPages);
 
@@ -72,7 +87,7 @@ export default function AdminUsersPage() {
   };
 
   const onSubmitModal = (data: Omit<UserRow, "id">) => {
-    if (!data.name?.trim() || !data.email?.trim()) {
+    if (!data.nom?.trim() || !data.prenom?.trim() || !data.email?.trim()) {
       push({
         title: t("invalidCredentials"),
         message: t("email"),
@@ -88,7 +103,7 @@ export default function AdminUsersPage() {
       setPage(1);
       push({
         title: t("add_user"),
-        message: `${created.name}`,
+        message: `${created.prenom} ${created.nom}`,
         kind: "success",
       });
       return;
@@ -100,7 +115,7 @@ export default function AdminUsersPage() {
       setModalOpen(false);
       push({
         title: t("edit_user"),
-        message: updated ? `${updated.name}` : t("save"),
+        message: updated ? `${updated.prenom} ${updated.nom}` : t("save"),
         kind: "success",
       });
     }
@@ -116,14 +131,14 @@ export default function AdminUsersPage() {
 
     push({
       title: t("delete_toast_title"),
-      message: `${removed.name}`,
+      message: `${removed.prenom} ${removed.nom}`,
       actionLabel: t("undo"),
       onAction: () => {
         restoreUser(removed);
         setRefreshKey((k) => k + 1);
         push({
           title: t("delete_toast_undo"),
-          message: `${removed.name}`,
+          message: `${removed.prenom} ${removed.nom}`,
           kind: "success",
         });
       },
@@ -161,15 +176,10 @@ export default function AdminUsersPage() {
           <table className="min-w-[980px] w-full text-left text-sm">
             <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
               <tr className="border-b border-gray-200 dark:border-gray-800">
-                <ThSortable label={t("table_name")} active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
+                <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("email")}</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">Tel</th>
-                <ThSortable
-                  label={t("table_parcels")}
-                  active={sortKey === "parcels"}
-                  dir={sortDir}
-                  onClick={() => toggleSort("parcels")}
-                />
+                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_parcels")}</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_status")}</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_last_activity")}</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
@@ -190,22 +200,22 @@ export default function AdminUsersPage() {
                     className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                   >
                     <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">
-                      {u.name}
+                      {u.prenom} {u.nom}
                       <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                        {u.role === "ADMIN" ? "Admin" : t("admin_kpi_farmers")}
+                        {u.role === "admin" ? "Admin" : t("admin_kpi_farmers")}
                       </div>
                     </td>
 
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{u.email}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{u.tel}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{u.parcels}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{u.telephone}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{parcelsByUser.get(u.id) ?? 0}</td>
 
                     <td className="px-4 py-3">
                       <StatusBadge status={u.status} t={t} />
                     </td>
 
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                      {formatLastActivity(u.lastActivity, lang)}
+                      {formatLastActivity(u.dernier_acces, lang)}
                     </td>
 
                     <td className="px-4 py-3">
@@ -355,7 +365,7 @@ function StatusBadge({ status, t }: { status: UserRow["status"]; t: (k: string) 
       ? t("status_active")
       : status === "pending"
       ? t("status_pending")
-      : t("status_blocked");
+      : t("status_suspended");
   return <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${cls}`}>{label}</span>;
 }
 

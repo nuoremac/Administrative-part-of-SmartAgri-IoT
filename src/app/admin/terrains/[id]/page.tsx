@@ -33,20 +33,20 @@ export default function TerrainDetailsPage() {
 
   const terrain = id ? getTerrain(id) : undefined;
   const localites = listLocalites().items;
-  const localite = terrain?.localiteId ? getLocalite(terrain.localiteId) : undefined;
+  const localite = terrain?.localite_id ? getLocalite(terrain.localite_id) : undefined;
 
   const parcelsResult = useMemo(() => {
     return terrain
-      ? listParcels({ filters: { terrainId: terrain.id }, sortKey: "id", sortDir: "asc" })
+      ? listParcels({ filters: { terrain_id: terrain.id }, sortKey: "id", sortDir: "asc" })
       : { items: [], total: 0 };
   }, [terrain, refreshKey]);
 
-  const handleUpdate = (data: { name: string; owner: string; area: number; localiteId: string }) => {
+  const handleUpdate = (data: { nom: string; user_id: string; superficie_totale: number; localite_id: string }) => {
     if (!terrain) return;
     const updated = updateTerrain(terrain.id, data);
     setRefreshKey((k) => k + 1);
     setModalOpen(false);
-    push({ title: t("edit_terrain"), message: updated?.name ?? t("save"), kind: "success" });
+    push({ title: t("edit_terrain"), message: updated?.nom ?? t("save"), kind: "success" });
   };
 
   const handleDelete = () => {
@@ -56,19 +56,34 @@ export default function TerrainDetailsPage() {
     if (!removed) return;
     push({
       title: t("delete_toast_title"),
-      message: removed.name,
+      message: removed.nom,
       actionLabel: t("undo"),
       onAction: () => {
         restoreTerrain(removed);
-        push({ title: t("delete_toast_undo"), message: removed.name, kind: "success" });
+        push({ title: t("delete_toast_undo"), message: removed.nom, kind: "success" });
       },
     });
     router.push("/admin/terrains");
   };
 
-  const handleAddLocalite = (data: { name: string; city: string; country: string }) => {
-    if (!data.name || !data.city || !data.country) return;
-    createLocalite(data);
+  const handleAddLocalite = (data: { nom: string; ville: string; pays: string }) => {
+    if (!data.nom || !data.ville || !data.pays) return;
+    createLocalite({
+      nom: data.nom,
+      ville: data.ville,
+      pays: data.pays,
+      latitude: 0,
+      longitude: 0,
+      altitude: 0,
+      quartier: "",
+      region: "",
+      code_postal: "",
+      continent: "Afrique",
+      timezone: "Africa/Douala",
+      superficie: 0,
+      population: 0,
+      climate_zone: "tropical",
+    });
     setRefreshKey((k) => k + 1);
     setLocaliteOpen(false);
   };
@@ -118,7 +133,7 @@ export default function TerrainDetailsPage() {
             {t("terrain_details_title")} <span className="text-gray-600 dark:text-gray-400">{terrain.id}</span>
           </h1>
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-            {terrain.name} • {terrain.area.toLocaleString()} m²
+            {terrain.nom} • {terrain.superficie_totale.toLocaleString()} m²
           </p>
         </div>
 
@@ -145,10 +160,11 @@ export default function TerrainDetailsPage() {
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("terrain_details_title")}</p>
           <div className="mt-3 space-y-2 text-xs text-gray-700 dark:text-gray-300">
             <Row label={t("table_id")} value={terrain.id} />
-            <Row label={t("terrain_name")} value={terrain.name} />
-            <Row label={t("terrain_owner")} value={terrain.owner} />
-            <Row label={t("terrain_area")} value={`${terrain.area.toLocaleString()} m²`} />
-            <Row label={t("terrain_localite")} value={localite ? formatLocalite(localite) : terrain.localiteId} />
+            <Row label={t("terrain_name")} value={terrain.nom} />
+            <Row label={t("terrain_owner")} value={terrain.user_id} />
+            <Row label={t("terrain_area")} value={`${terrain.superficie_totale.toLocaleString()} m²`} />
+            <Row label={t("terrain_localite")} value={localite ? formatLocalite(localite) : terrain.localite_id} />
+            <Row label={t("table_climate_zone")} value={localite?.climate_zone ?? "—"} />
           </div>
         </div>
 
@@ -162,7 +178,9 @@ export default function TerrainDetailsPage() {
                 <tr className="border-b border-gray-200 dark:border-gray-800">
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_id")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_name")}</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_owner")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_code")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_soil_type")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_current_crop")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_area")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
                 </tr>
@@ -170,7 +188,7 @@ export default function TerrainDetailsPage() {
               <tbody>
                 {parcelsResult.items.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-xs text-gray-600 dark:text-gray-400">
+                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-gray-600 dark:text-gray-400">
                       {t("empty_parcels")}
                     </td>
                   </tr>
@@ -181,9 +199,11 @@ export default function TerrainDetailsPage() {
                       className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                     >
                       <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{p.id}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.name}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.owner}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.area.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nom}</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code}</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.type_sol}</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.culture_actuelle}</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie.toLocaleString()}</td>
                       <td className="px-4 py-3">
                         <button
                           type="button"

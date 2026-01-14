@@ -17,8 +17,9 @@ import {
   type TerrainRow,
 } from "@/lib/mockTerrains";
 import { createLocalite, listLocalites, type Localite } from "@/lib/mockLocalites";
+import { listUsers } from "@/lib/mockUsers";
 
-type SortKey = "id" | "name" | "owner" | "area" | "localiteId";
+type SortKey = "id" | "nom" | "user_id" | "superficie_totale" | "localite_id";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
 
@@ -32,7 +33,7 @@ function useIsClient() {
 
 export default function TerrainsPage() {
   const router = useRouter();
-  const { query } = useAdminSearch();
+  const { query, setQuery } = useAdminSearch();
   const { push } = useToast();
   const { t } = useT();
   const isClient = useIsClient();
@@ -50,8 +51,18 @@ export default function TerrainsPage() {
   const localitesResult = useMemo(() => listLocalites(), [refreshKey]);
   const localites = localitesResult.items;
   const localiteMap = useMemo(
-    () => new Map(localites.map((l) => [l.id, `${l.name} — ${l.city}, ${l.country}`])),
+    () => new Map(localites.map((l) => [l.id, `${l.nom} — ${l.ville}, ${l.pays}`])),
     [localites]
+  );
+  const localiteById = useMemo(
+    () => new Map(localites.map((l) => [l.id, l])),
+    [localites]
+  );
+
+  const usersResult = useMemo(() => listUsers(), []);
+  const userMap = useMemo(
+    () => new Map(usersResult.items.map((u) => [u.id, u])),
+    [usersResult.items]
   );
 
   const listResult = useMemo(() => {
@@ -88,18 +99,29 @@ export default function TerrainsPage() {
     setModalOpen(true);
   };
 
-  const handleSubmit = (data: { name: string; owner: string; area: number; localiteId: string }) => {
-    if (!data.name || !data.owner || !data.localiteId) {
+  const handleSubmit = (data: { nom: string; user_id: string; superficie_totale: number; localite_id: string }) => {
+    if (!data.nom || !data.user_id || !data.localite_id) {
       push({ title: t("invalidCredentials"), message: t("terrain_name"), kind: "error" });
       return;
     }
 
     if (modalMode === "create") {
-      const created = createTerrain(data);
+      const created = createTerrain({
+        ...data,
+        description: "Terrain agricole",
+        type_terrain: "agricole",
+        latitude: 0,
+        longitude: 0,
+        perimetre: 0,
+        pente: 0,
+        date_acquisition: new Date().toISOString(),
+        statut: "actif",
+        nombre_parcelles: 0,
+      });
       setRefreshKey((k) => k + 1);
       setModalOpen(false);
       setPage(1);
-      push({ title: t("add_terrain"), message: created.name, kind: "success" });
+      push({ title: t("add_terrain"), message: created.nom, kind: "success" });
       return;
     }
 
@@ -107,7 +129,7 @@ export default function TerrainsPage() {
       const updated = updateTerrain(editing.id, data);
       setRefreshKey((k) => k + 1);
       setModalOpen(false);
-      push({ title: t("edit_terrain"), message: updated?.name ?? t("save"), kind: "success" });
+      push({ title: t("edit_terrain"), message: updated?.nom ?? t("save"), kind: "success" });
     }
   };
 
@@ -121,19 +143,34 @@ export default function TerrainsPage() {
 
     push({
       title: t("delete_toast_title"),
-      message: removed.name,
+      message: removed.nom,
       actionLabel: t("undo"),
       onAction: () => {
         restoreTerrain(removed);
         setRefreshKey((k) => k + 1);
-        push({ title: t("delete_toast_undo"), message: removed.name, kind: "success" });
+        push({ title: t("delete_toast_undo"), message: removed.nom, kind: "success" });
       },
     });
   };
 
-  const handleAddLocalite = (data: { name: string; city: string; country: string }) => {
-    if (!data.name || !data.city || !data.country) return;
-    createLocalite(data);
+  const handleAddLocalite = (data: { nom: string; ville: string; pays: string }) => {
+    if (!data.nom || !data.ville || !data.pays) return;
+    createLocalite({
+      nom: data.nom,
+      ville: data.ville,
+      pays: data.pays,
+      latitude: 0,
+      longitude: 0,
+      altitude: 0,
+      quartier: "",
+      region: "",
+      code_postal: "",
+      continent: "Afrique",
+      timezone: "Africa/Douala",
+      superficie: 0,
+      population: 0,
+      climate_zone: "tropical",
+    });
     setRefreshKey((k) => k + 1);
     setLocaliteOpen(false);
   };
@@ -163,10 +200,11 @@ export default function TerrainsPage() {
             <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
               <tr className="border-b border-gray-200 dark:border-gray-800">
                 <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
-                <ThSortable label={t("table_name")} active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
-                <ThSortable label={t("table_owner")} active={sortKey === "owner"} dir={sortDir} onClick={() => toggleSort("owner")} />
-                <ThSortable label={t("table_area")} active={sortKey === "area"} dir={sortDir} onClick={() => toggleSort("area")} />
-                <ThSortable label={t("table_locality")} active={sortKey === "localiteId"} dir={sortDir} onClick={() => toggleSort("localiteId")} />
+                <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
+                <ThSortable label={t("table_owner")} active={sortKey === "user_id"} dir={sortDir} onClick={() => toggleSort("user_id")} />
+                <ThSortable label={t("table_area")} active={sortKey === "superficie_totale"} dir={sortDir} onClick={() => toggleSort("superficie_totale")} />
+                <ThSortable label={t("table_locality")} active={sortKey === "localite_id"} dir={sortDir} onClick={() => toggleSort("localite_id")} />
+                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_climate_zone")}</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
               </tr>
             </thead>
@@ -174,22 +212,44 @@ export default function TerrainsPage() {
             <tbody>
               {listResult.items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
                     {t("empty_terrains")}
                   </td>
                 </tr>
               ) : (
-                listResult.items.map((row) => (
+                listResult.items.map((row) => {
+                  const owner = userMap.get(row.user_id);
+                  const ownerLabel = owner ? `${owner.prenom} ${owner.nom}` : row.user_id;
+                  const ownerQuery = owner?.email || owner?.prenom || owner?.nom || "";
+                  return (
                   <tr
                     key={row.id}
                     className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                   >
                     <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{row.id}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{row.name}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{row.owner}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{row.area.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{row.nom}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                      {localiteMap.get(row.localiteId) ?? row.localiteId}
+                      {owner ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (ownerQuery) setQuery(ownerQuery);
+                            router.push("/admin/users");
+                          }}
+                          className="font-semibold text-green-700 hover:underline dark:text-green-400"
+                        >
+                          {ownerLabel}
+                        </button>
+                      ) : (
+                        row.user_id
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{row.superficie_totale.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
+                      {localiteMap.get(row.localite_id) ?? row.localite_id}
+                    </td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
+                      {localiteById.get(row.localite_id)?.climate_zone ?? "—"}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -217,7 +277,8 @@ export default function TerrainsPage() {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
