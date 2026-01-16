@@ -141,16 +141,47 @@ export default function TerrainDetailsPage() {
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="rounded-sm bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-white hover:bg-amber-600"
+            aria-label={t("edit")}
           >
-            {t("edit")}
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            <span className="sr-only">{t("edit")}</span>
           </button>
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}
-            className="rounded-sm bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
+            aria-label={t("delete")}
           >
-            {t("delete")}
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 6h18" />
+              <path d="M8 6V4h8v2" />
+              <path d="M19 6l-1 14H6L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+            <span className="sr-only">{t("delete")}</span>
           </button>
         </div>
       </div>
@@ -182,7 +213,7 @@ export default function TerrainDetailsPage() {
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_soil_type")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_current_crop")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_area")}</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_view")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,9 +239,23 @@ export default function TerrainDetailsPage() {
                         <button
                           type="button"
                           onClick={() => router.push(`/admin/parcels/${p.id}`)}
-                          className="rounded-full bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700"
+                          aria-label={t("consult")}
                         >
-                          {t("consult")}
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                          <span className="sr-only">{t("consult")}</span>
                         </button>
                       </td>
                     </tr>

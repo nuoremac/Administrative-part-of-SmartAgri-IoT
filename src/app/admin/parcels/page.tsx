@@ -122,7 +122,7 @@ export default function ParcelsPage() {
                 <ThSortable label={t("table_area")} active={sortKey === "superficie"} dir={sortDir} onClick={() => toggleSort("superficie")} />
                 <ThSortable label={t("table_sensors")} active={sortKey === "nombre_capteurs"} dir={sortDir} onClick={() => toggleSort("nombre_capteurs")} />
                 <ThSortable label={t("table_terrain")} active={sortKey === "terrain_id"} dir={sortDir} onClick={() => toggleSort("terrain_id")} />
-                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_view")}</th>
               </tr>
             </thead>
 
@@ -155,16 +155,23 @@ export default function ParcelsPage() {
                         <button
                           type="button"
                           onClick={() => router.push(`/admin/parcels/${p.id}`)}
-                          className="rounded-full bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700"
+                          aria-label={t("consult")}
                         >
-                          {t("consult")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmParcel(p)}
-                          className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
-                        >
-                          {t("delete")}
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                          <span className="sr-only">{t("consult")}</span>
                         </button>
                       </div>
                     </td>

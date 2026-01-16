@@ -9,9 +9,7 @@ import { useT } from "@/components/i18n/useT";
 import { useLang } from "@/components/i18n/LangProvider";
 import {
   createUser,
-  deleteUser,
   listUsers,
-  restoreUser,
   updateUser,
   type UserRow,
 } from "@/lib/mockUsers";
@@ -121,24 +119,25 @@ export default function AdminUsersPage() {
     }
   };
 
-  const confirmDelete = () => {
+  const confirmSuspend = () => {
     if (!confirmUser) return;
-    const removed = deleteUser(confirmUser.id);
+    const previousStatus = confirmUser.status;
+    const updated = updateUser(confirmUser.id, { status: "suspended" });
     setConfirmUser(null);
-    if (!removed) return;
+    if (!updated) return;
 
     setRefreshKey((k) => k + 1);
 
     push({
-      title: t("delete_toast_title"),
-      message: `${removed.prenom} ${removed.nom}`,
+      title: t("suspend_toast_title"),
+      message: `${updated.prenom} ${updated.nom}`,
       actionLabel: t("undo"),
       onAction: () => {
-        restoreUser(removed);
+        updateUser(updated.id, { status: previousStatus });
         setRefreshKey((k) => k + 1);
         push({
-          title: t("delete_toast_undo"),
-          message: `${removed.prenom} ${removed.nom}`,
+          title: t("suspend_toast_undo"),
+          message: `${updated.prenom} ${updated.nom}`,
           kind: "success",
         });
       },
@@ -223,17 +222,31 @@ export default function AdminUsersPage() {
                         <button
                           type="button"
                           onClick={() => openEdit(u)}
-                          className="rounded-full bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700"
+                          aria-label={t("edit")}
                         >
-                          {t("edit")}
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                          <span className="sr-only">{t("edit")}</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setConfirmUser(u)}
-                          className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+                          className="rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600"
                         >
-                          {t("delete")}
+                          {t("suspend")}
                         </button>
                       </div>
                     </td>
@@ -266,11 +279,11 @@ export default function AdminUsersPage() {
 
       <ConfirmDialog
         open={!!confirmUser}
-        title={t("delete_confirm_title")}
-        message={t("delete_confirm_body")}
-        confirmLabel={t("delete")}
+        title={t("suspend_confirm_title")}
+        message={t("suspend_confirm_body")}
+        confirmLabel={t("suspend")}
         cancelLabel={t("cancel")}
-        onConfirm={confirmDelete}
+        onConfirm={confirmSuspend}
         onCancel={() => setConfirmUser(null)}
       />
     </div>
@@ -356,16 +369,9 @@ function StatusBadge({ status, t }: { status: UserRow["status"]; t: (k: string) 
   const cls =
     status === "active"
       ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
-      : status === "pending"
-      ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200"
       : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200";
 
-  const label =
-    status === "active"
-      ? t("status_active")
-      : status === "pending"
-      ? t("status_pending")
-      : t("status_suspended");
+  const label = status === "active" ? t("status_active") : t("status_suspended");
   return <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${cls}`}>{label}</span>;
 }
 

@@ -1,6 +1,6 @@
 import { applyListParams, readFromStorage, writeToStorage, type ListParams, type ListResult } from "./mockStore";
 
-export type UserStatus = "active" | "pending" | "suspended";
+export type UserStatus = "active" | "suspended";
 export type UserRole = "user" | "admin";
 
 export type UserRow = {
@@ -52,7 +52,7 @@ function seed(): UserRow[] {
       /(\d)(\d{2}) (\d{2}) (\d{2})/g,
       "$1$2 $3 $4"
     );
-    const status: UserStatus = i % 11 === 0 ? "suspended" : i % 7 === 0 ? "pending" : "active";
+    const status: UserStatus = i % 11 === 0 ? "suspended" : "active";
     const role: UserRole = i % 12 === 0 ? "admin" : "user";
 
     const created_at = new Date(now - (i % 14) * 24 * 60 * 60 * 1000).toISOString();
@@ -83,7 +83,11 @@ function seed(): UserRow[] {
 }
 
 function readAll(): UserRow[] {
-  return readFromStorage<UserRow>(LS_KEY, seed);
+  const rows = readFromStorage<UserRow>(LS_KEY, seed);
+  return rows.map((user) => ({
+    ...user,
+    status: user.status === "active" ? "active" : "suspended",
+  }));
 }
 
 function writeAll(users: UserRow[]) {
