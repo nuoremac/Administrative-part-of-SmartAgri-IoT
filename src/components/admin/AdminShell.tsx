@@ -11,8 +11,6 @@ import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useLang, type Lang } from "@/components/i18n/LangProvider";
 import { useT } from "@/components/i18n/useT";
 
-
-
 type NavItem = { href: string; label: string; icon: React.ReactNode };
 
 const iconClass = "h-4 w-4";
@@ -77,6 +75,24 @@ function IconLogout() {
   );
 }
 
+// Nouvelles icônes pour le thème
+function IconSun() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="4" fill="#FCD34D" stroke="currentColor" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" fill="none" />
+    </svg>
+  );
+}
+
+function IconMoon() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} stroke="currentColor" strokeWidth="1.8">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="#9CA3AF" />
+    </svg>
+  );
+}
+
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -86,15 +102,11 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const { lang, setLang } = useLang();
   const { t } = useT();
 
-  
-
   // protect admin area
   useEffect(() => {
     const u = getCurrentUser();
-    // Guard admin routes using the API role enum.
     if (!u || u.role !== UserRole.ADMIN) router.replace("/login");
   }, [router]);
-
 
   const nav: NavItem[] = useMemo(
     () => [
@@ -178,145 +190,108 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-[#dff7df] dark:bg-[#0d1117] dark:text-gray-100">
-        {/* <div className="flex min-h-screen"> */}
-        <div className="flex min-h-screen w-full">
-          {/* Desktop sidebar */}
-          <div className="hidden md:block">{Sidebar}</div>
+      <div className="flex min-h-screen w-full">
+        {/* Desktop sidebar */}
+        <div className="hidden md:block">{Sidebar}</div>
 
-          {/* Mobile drawer */}
-          {sidebarOpen && (
-            <div className="fixed inset-0 z-50 md:hidden">
-              <button
-                className="absolute inset-0 bg-black/40"
-                onClick={() => setSidebarOpen(false)}
-                aria-label="Close menu"
-              />
-              <div className="relative h-full w-[260px] shadow-xl">
-                <div className="flex items-center justify-end bg-green-200 px-2 py-2">
-                  <button
-                    onClick={() => setSidebarOpen(false)}
-                    className="rounded bg-white/70 px-2 py-1 text-xs font-semibold text-green-900"
-                  >
-                    ✕
-                  </button>
-                </div>
-                {Sidebar}
-              </div>
-            </div>
-          )}
-
-          {/* Content */}
-          <div className="min-w-0 flex-1">
-            {/* Topbar */}
-            <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-3 py-2
-                   dark:border-gray-800 dark:bg-[#0d1117]">
-             
-            
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="md:hidden rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white"
-              >
-                ☰
-              </button>
-
-              <div className="ml-auto flex w-full max-w-[520px] items-center gap-2">
-                {/* <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search..."
-                  className="w-full min-w-0 rounded-sm border border-gray-200 px-2 py-1 text-sm outline-none focus:border-green-500"
-                />
-                <button className="shrink-0 rounded-sm bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700">
-                  Search
-                </button> */}
-                {/* <form
-                  className="ml-auto flex w-full max-w-[520px] items-center gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    window.dispatchEvent(new CustomEvent("admin:search", { detail: query }));
-                  }}
-                >
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search..."
-                    // className="w-full min-w-0 rounded-sm border border-gray-200 px-2 py-1 text-sm outline-none focus:border-green-500"
-                  className="w-full min-w-0 rounded-sm border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900 outline-none
-                 placeholder:text-gray-400 focus:border-green-500
-                 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
-
-                  />
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-sm bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
-                  >
-                    Search
-                  </button>
-                </form> */}
-                <form className="ml-auto flex w-full max-w-[520px] items-center gap-2" onSubmit={(e) => e.preventDefault()}>
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={t("global_search_placeholder")}
-                    className="w-full min-w-0 rounded-sm border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900 outline-none
-                              placeholder:text-gray-400 focus:border-green-500
-                              dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
-                  />
-
-                  {query ? (
-                    <button
-                      type="button"
-                      onClick={clear}
-                      className="shrink-0 rounded-sm border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
-                                dark:border-gray-700 dark:text-gray-900 dark:hover:bg-[#161b22]"
-                    >
-                      {t("clear")}
-                    </button>
-                  ) : null}
-
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-sm bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
-                    onClick={() => {
-                      // optional: keep it for UX (“search button”), but search is live anyway
-                    }}
-                  >
-                    {t("search")}
-                  </button>
-                </form>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <select
-                  value={lang}
-                  onChange={(e) => setLang(e.target.value as Lang)}
-                  className="rounded-sm border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700
-                            dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-                  aria-label={t("language")}
-                >
-                  <option value="en">🇬🇧 EN</option>
-                  <option value="fr">🇫🇷 FR</option>
-                </select>
+        {/* Mobile drawer */}
+        {sidebarOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <button
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close menu"
+            />
+            <div className="relative h-full w-[260px] shadow-xl">
+              <div className="flex items-center justify-end bg-green-200 px-2 py-2">
                 <button
-                  type="button"
-                  onClick={toggleTheme}
-                  className="rounded-sm border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
-                            dark:border-gray-700 dark:text-gray-100 dark:hover:bg-[#161b22]"
-                  suppressHydrationWarning
+                  onClick={() => setSidebarOpen(false)}
+                  className="rounded bg-white/70 px-2 py-1 text-xs font-semibold text-green-900"
                 >
-                  {theme === "dark" ? t("theme_light") : t("theme_dark")}
+                  ✕
                 </button>
               </div>
-            </header>
-
-            {/* Page content */}
-            {/* <main className="px-3 py-3 sm:px-4">{children}</main> */}
-            <main className="min-h-[calc(100vh-72px)] bg-[#eef8ee] px-3 py-3 text-gray-900 dark:bg-[#0d1117] dark:text-gray-100 sm:px-4">
-              {children}
-            </main>
-
+              {Sidebar}
+            </div>
           </div>
+        )}
+
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          {/* Topbar */}
+          <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-3 py-2
+                 dark:border-gray-800 dark:bg-[#0d1117]">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden rounded bg-green-600 px-2 py-1 text-xs font-semibold text-white"
+            >
+              ☰
+            </button>
+
+            <div className="ml-auto flex w-full max-w-[520px] items-center gap-2">
+              <form className="ml-auto flex w-full max-w-[520px] items-center gap-2" onSubmit={(e) => e.preventDefault()}>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("global_search_placeholder")}
+                  className="w-full min-w-0 rounded-sm border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900 outline-none
+                            placeholder:text-gray-400 focus:border-green-500
+                            dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+                />
+
+                {query ? (
+                  <button
+                    type="button"
+                    onClick={clear}
+                    className="shrink-0 rounded-sm border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
+                              dark:border-gray-700 dark:text-gray-100 dark:hover:bg-[#161b22]"
+                  >
+                    {t("clear")}
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  className="shrink-0 rounded-sm bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
+                  onClick={() => {}}
+                >
+                  {t("search")}
+                </button>
+              </form>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value as Lang)}
+                className="rounded-sm border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700
+                          dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                aria-label={t("language")}
+              >
+                <option value="en">🇬🇧 EN</option>
+                <option value="fr">🇫🇷 FR</option>
+              </select>
+              
+              {/* Bouton thème avec icônes */}
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="flex items-center gap-1.5 rounded-sm border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
+                          dark:border-gray-700 dark:text-gray-100 dark:hover:bg-[#161b22]"
+                suppressHydrationWarning
+                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              >
+                {theme === "dark" ? <IconSun /> : <IconMoon />}
+              </button>
+            </div>
+          </header>
+
+          {/* Page content */}
+          <main className="min-h-[calc(100vh-72px)] bg-[#eef8ee] px-3 py-3 text-gray-900 dark:bg-[#0d1117] dark:text-gray-100 sm:px-4">
+            {children}
+          </main>
         </div>
+      </div>
     </div>
   );
 }
