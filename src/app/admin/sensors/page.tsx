@@ -1,19 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
-import { useToast } from "@/components/ui/ToastProvider";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useT } from "@/components/i18n/useT";
 import {
-  deleteSensor,
+  createSensor,
   listSensors,
-  restoreSensor,
-  type SensorRow,
 } from "@/lib/mockSensors";
 import { getLatestMeasurement } from "@/lib/mockSensorData";
-import { getParcel } from "@/lib/mockParcels";
+import { getParcel, listParcels } from "@/lib/mockParcels";
 
 type SortKey = "id" | "nom" | "dev_eui" | "parcelle_id";
 type SortDir = "asc" | "desc";
@@ -39,14 +35,16 @@ function StatusBadge({ level, t }: { level: "ok" | "warning" | "offline"; t: (k:
 export default function SensorsPage() {
   const router = useRouter();
   const { query, setQuery } = useAdminSearch();
-  const { push } = useToast();
   const { t } = useT();
 
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("id");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [confirmSensor, setConfirmSensor] = useState<SensorRow | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isAdding, setIsAdding] = useState(false);
+  const [draft, setDraft] = useState({ nom: "", dev_eui: "", code: "", parcelle_id: "" });
+
+  const parcels = useMemo(() => listParcels({ limit: 200 }).items, []);
 
   const listResult = useMemo(() => {
     return listSensors({
@@ -61,6 +59,12 @@ export default function SensorsPage() {
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), totalPages);
 
+  useEffect(() => {
+    if (!draft.parcelle_id && parcels.length > 0) {
+      setDraft((prev) => ({ ...prev, parcelle_id: parcels[0].id }));
+    }
+  }, [draft.parcelle_id, parcels]);
+
   const toggleSort = (key: SortKey) => {
     if (sortKey !== key) {
       setSortKey(key);
@@ -68,26 +72,6 @@ export default function SensorsPage() {
       return;
     }
     setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-  };
-
-  const confirmDelete = () => {
-    if (!confirmSensor) return;
-    const removed = deleteSensor(confirmSensor.id);
-    setConfirmSensor(null);
-    if (!removed) return;
-
-    setRefreshKey((k) => k + 1);
-
-    push({
-      title: t("delete_toast_title"),
-      message: `${removed.id}`,
-      actionLabel: t("undo"),
-      onAction: () => {
-        restoreSensor(removed);
-        setRefreshKey((k) => k + 1);
-        push({ title: t("delete_toast_undo"), message: `${removed.id}`, kind: "success" });
-      },
-    });
   };
 
   return (
@@ -101,17 +85,114 @@ export default function SensorsPage() {
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("sensors_subtitle")}</p>
         </div>
 
-        {query ? (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setQuery("")}
-            className="rounded-sm border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
-                       dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-200 dark:hover:bg-[#0d1117]"
+            onClick={() => {
+              setIsAdding((prev) => !prev);
+              if (!isAdding) {
+                setDraft((prev) => ({
+                  nom: "",
+                  dev_eui: "",
+                  code: "",
+                  parcelle_id: prev.parcelle_id || parcels[0]?.id || "",
+                }));
+              }
+            }}
+            className="rounded-sm bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
           >
-            {t("clear")}
+            + {t("add_sensor")}
           </button>
-        ) : null}
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="rounded-sm border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
+                         dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-200 dark:hover:bg-[#0d1117]"
+            >
+              {t("clear")}
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {isAdding ? (
+        <div className="mb-4 rounded-sm border border-gray-300 bg-white p-4 text-xs text-gray-700 dark:border-gray-800 dark:bg-[#0d1117] dark:text-gray-300">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{t("table_name")}</label>
+              <input
+                value={draft.nom}
+                onChange={(e) => setDraft((prev) => ({ ...prev, nom: e.target.value }))}
+                className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">DevEUI</label>
+              <input
+                value={draft.dev_eui}
+                onChange={(e) => setDraft((prev) => ({ ...prev, dev_eui: e.target.value }))}
+                className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{t("table_code")}</label>
+              <input
+                value={draft.code}
+                onChange={(e) => setDraft((prev) => ({ ...prev, code: e.target.value }))}
+                className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{t("table_parcels")}</label>
+              <select
+                value={draft.parcelle_id}
+                onChange={(e) => setDraft((prev) => ({ ...prev, parcelle_id: e.target.value }))}
+                className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+              >
+                {parcels.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nom} ({p.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date().toISOString();
+                createSensor({
+                  nom: draft.nom.trim() || "Capteur",
+                  dev_eui: draft.dev_eui.trim() || `AUTO-${Date.now()}`,
+                  code: draft.code.trim() || `CPT-${Date.now()}`,
+                  parcelle_id: draft.parcelle_id || parcels[0]?.id || "",
+                  date_installation: now,
+                  date_activation: now,
+                });
+                setRefreshKey((k) => k + 1);
+                setIsAdding(false);
+              }}
+              className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
+            >
+              {t("save")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAdding(false)}
+              className="rounded-sm border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50
+                         dark:border-gray-700 dark:text-gray-200 dark:hover:bg-[#161b22]"
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-sm border border-gray-400 bg-white dark:border-gray-800 dark:bg-[#0d1117]">
         <div className="overflow-x-auto">
@@ -122,7 +203,7 @@ export default function SensorsPage() {
                 <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
                 <ThSortable label="DevEUI" active={sortKey === "dev_eui"} dir={sortDir} onClick={() => toggleSort("dev_eui")} />
                 <ThSortable label={t("table_parcels")} active={sortKey === "parcelle_id"} dir={sortDir} onClick={() => toggleSort("parcelle_id")} />
-                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_view")}</th>
               </tr>
             </thead>
 
@@ -154,16 +235,23 @@ export default function SensorsPage() {
                         <button
                           type="button"
                           onClick={() => router.push(`/admin/sensors/${s.id}`)}
-                          className="rounded-full bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700"
+                          aria-label={t("consult")}
                         >
-                          {t("consult")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmSensor(s)}
-                          className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
-                        >
-                          {t("delete")}
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                          <span className="sr-only">{t("consult")}</span>
                         </button>
                       </div>
                     </td>
@@ -186,15 +274,6 @@ export default function SensorsPage() {
         </div>
       </div>
 
-      <ConfirmDialog
-        open={!!confirmSensor}
-        title={t("delete_confirm_title")}
-        message={t("delete_confirm_body")}
-        confirmLabel={t("delete")}
-        cancelLabel={t("cancel")}
-        onConfirm={confirmDelete}
-        onCancel={() => setConfirmSensor(null)}
-      />
     </div>
   );
 }

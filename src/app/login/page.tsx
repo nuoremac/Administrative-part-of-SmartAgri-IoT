@@ -4,8 +4,8 @@
 import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { mockAdminLogin } from "@/lib/mockAuth";
-import { saveUser } from "@/lib/mockSession";
+import { AuthenticationService } from "@/lib/services/AuthenticationService";
+import { saveAuthSession } from "@/lib/authSession";
 import { useLang, type Lang } from "@/components/i18n/LangProvider";
 import { useT } from "@/components/i18n/useT";
 
@@ -15,15 +15,15 @@ export default function LoginPage() {
   const { t } = useT();
 
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [showCode, setShowCode] = useState(false);
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   // ✅ error + loading + info state
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     setError(null);
@@ -31,15 +31,15 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const user = mockAdminLogin(email.trim(), code.trim());
-
-      if (!user) {
-        setError(t("invalidCredentials"));
-        return;
-      }
-
-      saveUser(user);
+      // Call the real API and persist tokens/user in localStorage.
+      const tokens = await AuthenticationService.loginApiV1AuthLoginPost({
+        email: email.trim(),
+        password: password.trim(),
+      });
+      saveAuthSession(tokens);
       router.push("/admin/dashboard");
+    } catch {
+      setError(t("invalidCredentials"));
     } finally {
       setLoading(false);
     }
@@ -136,15 +136,15 @@ export default function LoginPage() {
             {/* Code sécurité + eye toggle */}
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                {t("adminCode")}
+                {t("password")}
               </label>
 
               <div className="relative">
                 <input
-                  type={showCode ? "text" : "password"}
-                  value={code}
+                  type={showPassword ? "text" : "password"}
+                  value={password}
                   onChange={(e) => {
-                    setCode(e.target.value);
+                    setPassword(e.target.value);
                     setError(null);
                     setInfo(null);
                   }}
@@ -155,11 +155,11 @@ export default function LoginPage() {
 
                 <button
                   type="button"
-                  onClick={() => setShowCode((v) => !v)}
+                  onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-900"
                   aria-label="Toggle password visibility"
                 >
-                  {showCode ? (
+                  {showPassword ? (
                     // Eye OFF (slashed)
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -220,6 +220,5 @@ export default function LoginPage() {
     </main>
   );
 }
-
 
 

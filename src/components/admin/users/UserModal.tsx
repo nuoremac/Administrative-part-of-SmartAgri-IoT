@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useT } from "@/components/i18n/useT";
 import type { UserRow, UserRole, UserStatus } from "@/lib/mockUsers";
 
 type Mode = "create" | "edit";
@@ -72,10 +73,11 @@ export default function UserModal({
   // Important: this state is created when component mounts.
   // We'll force remount from parent by passing a changing `key` to <UserModal />.
   const [form, setForm] = useState<UserDraft>(initialDraft);
+  const { t } = useT();
 
   if (!open) return null;
 
-  const title = mode === "create" ? "Ajouter un utilisateur" : "Modifier l’utilisateur";
+  const title = mode === "create" ? t("user_modal_create_title") : t("user_modal_edit_title");
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
@@ -84,9 +86,7 @@ export default function UserModal({
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</p>
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-              Renseignez les informations et validez.
-            </p>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("user_modal_subtitle")}</p>
           </div>
           <button
             type="button"
@@ -99,7 +99,7 @@ export default function UserModal({
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Nom">
+          <Field label={t("field_last_name")}>
             <input
               value={form.nom}
               onChange={(e) => setForm((p) => ({ ...p, nom: e.target.value }))}
@@ -107,7 +107,7 @@ export default function UserModal({
             />
           </Field>
 
-          <Field label="Prénom">
+          <Field label={t("field_first_name")}>
             <input
               value={form.prenom}
               onChange={(e) => setForm((p) => ({ ...p, prenom: e.target.value }))}
@@ -115,7 +115,7 @@ export default function UserModal({
             />
           </Field>
 
-          <Field label="Téléphone">
+          <Field label={t("field_phone")}>
             <input
               value={form.telephone}
               onChange={(e) => setForm((p) => ({ ...p, telephone: e.target.value }))}
@@ -123,7 +123,7 @@ export default function UserModal({
             />
           </Field>
 
-          <Field label="Email" className="sm:col-span-2">
+          <Field label={t("email")} className="sm:col-span-2">
             <input
               value={form.email}
               onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
@@ -131,7 +131,7 @@ export default function UserModal({
             />
           </Field>
 
-          <Field label="Statut">
+          <Field label={t("table_status")}>
             <select
               value={form.status}
               onChange={(e) =>
@@ -139,20 +139,19 @@ export default function UserModal({
               }
               className={inputCls}
             >
-              <option value="active">Actif</option>
-              <option value="pending">En attente</option>
-              <option value="suspended">Suspendu</option>
+              <option value="active">{t("status_active")}</option>
+              <option value="suspended">{t("status_suspended")}</option>
             </select>
           </Field>
 
-          <Field label="Rôle">
+          <Field label={t("field_role")}>
             <select
               value={form.role}
               onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as UserRole }))}
               className={inputCls}
             >
-              <option value="user">Utilisateur</option>
-              <option value="admin">Admin</option>
+              <option value="user">{t("role_user")}</option>
+              <option value="admin">{t("role_admin")}</option>
             </select>
           </Field>
         </div>
@@ -164,7 +163,7 @@ export default function UserModal({
             className="h-9 rounded-sm border border-gray-300 px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50
                        dark:border-gray-700 dark:text-gray-200 dark:hover:bg-[#161b22]"
           >
-            Annuler
+            {t("cancel")}
           </button>
 
           <button
@@ -181,7 +180,7 @@ export default function UserModal({
             }
             className="h-9 rounded-sm bg-green-600 px-4 text-xs font-semibold text-white hover:bg-green-700"
           >
-            Enregistrer
+            {t("save")}
           </button>
         </div>
       </div>

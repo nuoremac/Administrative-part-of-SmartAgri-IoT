@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useT } from "@/components/i18n/useT";
 import { useLang } from "@/components/i18n/LangProvider";
 import { getLatestMeasurement, listSensorData } from "@/lib/mockSensorData";
-import { getParcel } from "@/lib/mockParcels";
-import { getSensor } from "@/lib/mockSensors";
+import { getParcel, listParcels } from "@/lib/mockParcels";
+import { deleteSensor, getSensor, updateSensor } from "@/lib/mockSensors";
 import {
   LineChart,
   Line,
@@ -38,8 +38,13 @@ export default function SensorDetailsPage() {
   const id: string = Array.isArray(raw) ? raw[0] : (raw ?? "");
 
   const [range, setRange] = useState<"24h" | "7d" | "30d">("24h");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState({ nom: "", dev_eui: "", code: "" });
+  const [assignedParcelId, setAssignedParcelId] = useState("");
 
-  const sensor = id ? getSensor(id) : undefined;
+  const sensor = useMemo(() => (id ? getSensor(id) : undefined), [id, refreshKey]);
+  const parcels = useMemo(() => listParcels({ limit: 200 }).items, []);
 
   const parcel = useMemo(() => {
     if (!sensor) return null;
@@ -58,6 +63,12 @@ export default function SensorDetailsPage() {
       temperature: m.temperature,
     }));
   }, [sensor, range]);
+
+  useEffect(() => {
+    if (!sensor) return;
+    setDraft({ nom: sensor.nom, dev_eui: sensor.dev_eui, code: sensor.code });
+    setAssignedParcelId(sensor.parcelle_id);
+  }, [sensor]);
 
   if (!id) {
     return (
@@ -129,6 +140,55 @@ export default function SensorDetailsPage() {
             <option value="7d">{t("dashboard_range_7d")}</option>
             <option value="30d">{t("dashboard_range_30d")}</option>
           </select>
+          <button
+            type="button"
+            onClick={() => setIsEditing((prev) => !prev)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-white hover:bg-amber-600"
+            aria-label={t("edit")}
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            <span className="sr-only">{t("edit")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!window.confirm(t("delete_confirm_body"))) return;
+              deleteSensor(sensor.id);
+              router.push("/admin/sensors");
+            }}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
+            aria-label={t("delete")}
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 6h18" />
+              <path d="M8 6V4h8v2" />
+              <path d="M19 6l-1 14H6L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+            <span className="sr-only">{t("delete")}</span>
+          </button>
         </div>
       </div>
 
@@ -142,6 +202,67 @@ export default function SensorDetailsPage() {
             <Row label={t("sensor_status_label")} value={statusLabel(level, t)} />
             <Row label={t("table_last_measure")} value={lastMeasure} />
           </div>
+          {isEditing ? (
+            <div className="mt-4 space-y-3 text-xs text-gray-700 dark:text-gray-300">
+              <div>
+                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">
+                  {t("table_name")}
+                </label>
+                <input
+                  value={draft.nom}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, nom: e.target.value }))}
+                  className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                             dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">DevEUI</label>
+                <input
+                  value={draft.dev_eui}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, dev_eui: e.target.value }))}
+                  className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                             dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{t("table_code")}</label>
+                <input
+                  value={draft.code}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, code: e.target.value }))}
+                  className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                             dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateSensor(sensor.id, {
+                      nom: draft.nom.trim(),
+                      dev_eui: draft.dev_eui.trim(),
+                      code: draft.code.trim(),
+                    });
+                    setRefreshKey((prev) => prev + 1);
+                    setIsEditing(false);
+                  }}
+                  className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
+                >
+                  {t("save")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft({ nom: sensor.nom, dev_eui: sensor.dev_eui, code: sensor.code });
+                    setIsEditing(false);
+                  }}
+                  className="rounded-sm border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50
+                             dark:border-gray-700 dark:text-gray-200 dark:hover:bg-[#161b22]"
+                >
+                  {t("cancel")}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-2">
@@ -162,6 +283,31 @@ export default function SensorDetailsPage() {
           <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("linked_parcels")}</p>
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("sensor_parcels_subtitle")}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select
+                value={assignedParcelId}
+                onChange={(e) => setAssignedParcelId(e.target.value)}
+                className="h-9 min-w-[220px] rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+              >
+                {parcels.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nom} ({p.id})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!assignedParcelId) return;
+                  updateSensor(sensor.id, { parcelle_id: assignedParcelId });
+                  setRefreshKey((prev) => prev + 1);
+                }}
+                className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
+              >
+                {t("save")}
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -197,9 +343,23 @@ export default function SensorDetailsPage() {
                         <button
                           type="button"
                           onClick={() => router.push(`/admin/parcels/${p.id}`)}
-                          className="rounded-full bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700"
+                          aria-label={t("consult")}
                         >
-                          {t("consult")}
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                          <span className="sr-only">{t("consult")}</span>
                         </button>
                       </td>
                     </tr>
