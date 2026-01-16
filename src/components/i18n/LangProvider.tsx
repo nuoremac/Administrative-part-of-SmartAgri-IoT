@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useMemo, useSyncExternalStore } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 
 export type Lang = "en" | "fr";
 
@@ -31,13 +31,22 @@ function normalizeLang(v: unknown): Lang | null {
   return v === "en" || v === "fr" ? v : null;
 }
 
+function readStoredLang(): Lang | null {
+  if (!hasWindow()) return null;
+  return normalizeLang(localStorage.getItem(LS_KEY));
+}
+
 function subscribe(cb: () => void) {
   if (!hasWindow()) return () => {};
   const handler = () => cb();
   window.addEventListener(EVT, handler);
 
   const onStorage = (e: StorageEvent) => {
-    if (e.key === LS_KEY) cb();
+    if (e.key === LS_KEY) {
+      const stored = readStoredLang();
+      if (stored) cache = stored;
+      cb();
+    }
   };
   window.addEventListener("storage", onStorage);
 
@@ -48,9 +57,6 @@ function subscribe(cb: () => void) {
 }
 
 function getSnapshot(): Lang {
-  if (!hasWindow()) return SERVER_LANG;
-  const stored = normalizeLang(localStorage.getItem(LS_KEY));
-  if (stored) cache = stored;
   return cache;
 }
 
@@ -67,6 +73,11 @@ function setLangStore(next: Lang) {
 
 export default function LanguageProvider({ children }: { children: React.ReactNode }) {
   const lang = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  useEffect(() => {
+    const stored = readStoredLang();
+    if (stored && stored !== cache) setLangStore(stored);
+  }, []);
 
   const value = useMemo<LanguageCtx>(
     () => ({
