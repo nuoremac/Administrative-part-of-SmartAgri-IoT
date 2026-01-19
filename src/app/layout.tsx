@@ -1,4 +1,5 @@
 import "./globals.css";
+import OpenApiProvider from "@/components/OpenApiProvider";
 import LanguageProvider from "@/components/i18n/LangProvider";
 import ThemeProvider from "@/components/theme/ThemeProvider";
 import { ToastProvider } from "@/components/ui/ToastProvider";
@@ -9,11 +10,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <ThemeProvider>
-          <LanguageProvider>
-            <ToastProvider>
-              <AdminSearchProvider>{children}</AdminSearchProvider>
-            </ToastProvider>
-          </LanguageProvider>
+          <OpenApiProvider>
+            <LanguageProvider>
+              <ToastProvider>
+                <AdminSearchProvider>{children}</AdminSearchProvider>
+              </ToastProvider>
+            </LanguageProvider>
+          </OpenApiProvider>
         </ThemeProvider>
       </body>
     </html>

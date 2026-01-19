@@ -2,9 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type NotificationPreferences = {
-    email?: boolean;
-    push?: boolean;
-    sms?: boolean;
-};
-
+export enum UserRole_Input {
+    ADMIN = 'admin',
+    USER = 'user',
+    MANAGER = 'manager',
+    VIEWER = 'viewer',
+}

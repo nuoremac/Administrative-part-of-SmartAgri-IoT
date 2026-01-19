@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ParcellePredictionRequest } from '../models/ParcellePredictionRequest';
 import type { RecommendationResponse } from '../models/RecommendationResponse';
 import type { UnifiedRecommendationRequest } from '../models/UnifiedRecommendationRequest';
 import type { UnifiedRecommendationResponse } from '../models/UnifiedRecommendationResponse';
@@ -105,6 +106,32 @@ export class RecommandationsService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/recommendations/predict-crop',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Prédire la culture pour une parcelle (utilise les dernières mesures)
+     * Prédit la culture optimale pour une parcelle spécifique en utilisant ses dernières mesures de capteurs.
+     * Si des données sont fournies dans le body, elles surchargent celles de la base de données (optionnel).
+     * @param parcelleId
+     * @param requestBody
+     * @returns UnifiedRecommendationResponse Successful Response
+     * @throws ApiError
+     */
+    public static predictParcelleCropApiV1RecommendationsParcelleParcelleIdPredictCropPost(
+        parcelleId: string,
+        requestBody?: (ParcellePredictionRequest | null),
+    ): CancelablePromise<UnifiedRecommendationResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/recommendations/parcelle/{parcelle_id}/predict-crop',
+            path: {
+                'parcelle_id': parcelleId,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

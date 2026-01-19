@@ -3,8 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { UserResponse } from '../models/UserResponse';
-import type { UserRole } from '../models/UserRole';
-import type { UserStatus } from '../models/UserStatus';
+import type { UserRole_Input } from '../models/UserRole_Input';
 import type { UserUpdate } from '../models/UserUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -12,13 +11,7 @@ import { request as __request } from '../core/request';
 export class UsersService {
     /**
      * Get My Profile
-     * R�cup�re le profil de l'utilisateur connecte
-     *
-     * Args:
-     * current_user: L'utilisateur actuel
-     *
-     * Returns:
-     * UserResponse: Profil de l'utilisateur
+     * Recupere le profil de l'utilisateur connecte
      * @returns UserResponse Successful Response
      * @throws ApiError
      */
@@ -30,15 +23,7 @@ export class UsersService {
     }
     /**
      * Update My Profile
-     * Met � jour le profil de l'utilisateur connect�
-     *
-     * Args:
-     * user_data: Donn�es de mise � jour
-     * current_user: L'utilisateur actuel
-     * db: Session de base de donn�es
-     *
-     * Returns:
-     * UserResponse: Profil mis � jour
+     * Met a jour le profil de l'utilisateur connecte
      * @param requestBody
      * @returns UserResponse Successful Response
      * @throws ApiError
@@ -58,21 +43,9 @@ export class UsersService {
     }
     /**
      * Get All Users
-     * R�cup�re tous les utilisateurs (Admin uniquement)
-     *
-     * Args:
-     * skip: Nombre d'utilisateurs � sauter
-     * limit: Nombre maximum d'utilisateurs � retourner
-     * status: Filtre par statut
-     * role: Filtre par r�le
-     * current_user: L'utilisateur actuel (doit �tre admin)
-     * db: Session de base de donn�es
-     *
-     * Returns:
-     * List[UserResponse]: Liste des utilisateurs
+     * Recupere tous les utilisateurs (Admin uniquement)
      * @param skip
      * @param limit
-     * @param status
      * @param role
      * @returns UserResponse Successful Response
      * @throws ApiError
@@ -80,8 +53,7 @@ export class UsersService {
     public static getAllUsersApiV1UsersGet(
         skip?: number,
         limit: number = 100,
-        status?: (UserStatus | null),
-        role?: (UserRole | null),
+        role?: (UserRole_Input | null),
     ): CancelablePromise<Array<UserResponse>> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -89,7 +61,6 @@ export class UsersService {
             query: {
                 'skip': skip,
                 'limit': limit,
-                'status': status,
                 'role': role,
             },
             errors: {
@@ -99,18 +70,7 @@ export class UsersService {
     }
     /**
      * Get User By Id
-     * R�cup�re un utilisateur par son ID (Admin uniquement)
-     *
-     * Args:
-     * user_id: ID de l'utilisateur
-     * current_user: L'utilisateur actuel (doit �tre admin)
-     * db: Session de base de donn�es
-     *
-     * Returns:
-     * UserResponse: L'utilisateur
-     *
-     * Raises:
-     * HTTPException: Si l'utilisateur n'existe pas
+     * Recupere un utilisateur par son ID (Admin uniquement)
      * @param userId
      * @returns UserResponse Successful Response
      * @throws ApiError
@@ -131,16 +91,7 @@ export class UsersService {
     }
     /**
      * Update User
-     * Met � jour un utilisateur (Admin uniquement)
-     *
-     * Args:
-     * user_id: ID de l'utilisateur
-     * user_data: Donn�es de mise � jour
-     * current_user: L'utilisateur actuel (doit �tre admin)
-     * db: Session de base de donn�es
-     *
-     * Returns:
-     * UserResponse: Utilisateur mis � jour
+     * Met a jour un utilisateur (Admin uniquement)
      * @param userId
      * @param requestBody
      * @returns UserResponse Successful Response
@@ -166,17 +117,6 @@ export class UsersService {
     /**
      * Delete User
      * Supprime un utilisateur (Admin uniquement)
-     *
-     * Args:
-     * user_id: ID de l'utilisateur
-     * current_user: L'utilisateur actuel (doit �tre admin)
-     * db: Session de base de donn�es
-     *
-     * Returns:
-     * Statut 204 No Content
-     *
-     * Raises:
-     * HTTPException: Si l'utilisateur tente de se supprimer lui-m�me
      * @param userId
      * @returns void
      * @throws ApiError
@@ -187,105 +127,6 @@ export class UsersService {
         return __request(OpenAPI, {
             method: 'DELETE',
             url: '/api/v1/users/{user_id}',
-            path: {
-                'user_id': userId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Change User Status
-     * Change le statut d'un utilisateur (Admin uniquement)
-     *
-     * Args:
-     * user_id: ID de l'utilisateur
-     * new_status: Nouveau statut
-     * current_user: L'utilisateur actuel (doit �tre admin)
-     * db: Session de base de donn�es
-     *
-     * Returns:
-     * UserResponse: Utilisateur avec le statut mis � jour
-     *
-     * Raises:
-     * HTTPException: Si l'utilisateur tente de changer son propre statut
-     * @param userId
-     * @param newStatus
-     * @returns UserResponse Successful Response
-     * @throws ApiError
-     */
-    public static changeUserStatusApiV1UsersUserIdStatusPatch(
-        userId: string,
-        newStatus: UserStatus,
-    ): CancelablePromise<UserResponse> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/v1/users/{user_id}/status',
-            path: {
-                'user_id': userId,
-            },
-            query: {
-                'new_status': newStatus,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Activate User
-     * Active un utilisateur (Admin uniquement)
-     *
-     * Args:
-     * user_id: ID de l'utilisateur
-     * current_user: L'utilisateur actuel (doit �tre admin)
-     * db: Session de base de donn�es
-     *
-     * Returns:
-     * UserResponse: Utilisateur activ�
-     * @param userId
-     * @returns UserResponse Successful Response
-     * @throws ApiError
-     */
-    public static activateUserApiV1UsersUserIdActivatePatch(
-        userId: string,
-    ): CancelablePromise<UserResponse> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/v1/users/{user_id}/activate',
-            path: {
-                'user_id': userId,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Suspend User
-     * Suspend un utilisateur (Admin uniquement)
-     *
-     * Args:
-     * user_id: ID de l'utilisateur
-     * current_user: L'utilisateur actuel (doit �tre admin)
-     * db: Session de base de donn�es
-     *
-     * Returns:
-     * UserResponse: Utilisateur suspendu
-     *
-     * Raises:
-     * HTTPException: Si l'utilisateur tente de se suspendre lui-m�me
-     * @param userId
-     * @returns UserResponse Successful Response
-     * @throws ApiError
-     */
-    public static suspendUserApiV1UsersUserIdSuspendPatch(
-        userId: string,
-    ): CancelablePromise<UserResponse> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/v1/users/{user_id}/suspend',
             path: {
                 'user_id': userId,
             },

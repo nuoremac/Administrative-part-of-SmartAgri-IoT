@@ -1,4 +1,7 @@
-export type UserRole = "ADMIN" | "FARMER";
+export enum UserRole {
+  ADMIN = "ADMIN",
+  FARMER = "FARMER",
+}
 
 export type MockUser = {
   id: string;

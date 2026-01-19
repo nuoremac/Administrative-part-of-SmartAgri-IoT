@@ -4,8 +4,8 @@
 import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AuthenticationService } from "@/lib/services/AuthenticationService";
-import { saveAuthSession } from "@/lib/authSession";
+import { mockAdminLogin } from "@/lib/mockAuth";
+import { saveUser } from "@/lib/mockSession";
 import { useLang, type Lang } from "@/components/i18n/LangProvider";
 import { useT } from "@/components/i18n/useT";
 
@@ -31,12 +31,12 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Call the real API and persist tokens/user in localStorage.
-      const tokens = await AuthenticationService.loginApiV1AuthLoginPost({
-        email: email.trim(),
-        password: password.trim(),
-      });
-      saveAuthSession(tokens);
+      const user = mockAdminLogin(email.trim(), password.trim());
+      if (!user) {
+        setError(t("invalidCredentials"));
+        return;
+      }
+      saveUser(user);
       router.push("/admin/dashboard");
     } catch {
       setError(t("invalidCredentials"));
@@ -220,5 +220,4 @@ export default function LoginPage() {
     </main>
   );
 }
-
 

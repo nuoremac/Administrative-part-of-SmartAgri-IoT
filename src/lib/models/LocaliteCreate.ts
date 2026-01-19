@@ -2,16 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { Address } from './Address';
 import type { ClimateZone } from './ClimateZone';
-import type { Coordinates } from './Coordinates';
+import type { Continent } from './Continent';
 export type LocaliteCreate = {
     nom: string;
-    coordinates: Coordinates;
-    address: Address;
-    timezone: string;
-    superficie?: (number | null);
-    population?: (number | null);
+    ville: string;
+    region?: (string | null);
+    pays: string;
+    continent: Continent;
     climate_zone?: (ClimateZone | null);
 };
 

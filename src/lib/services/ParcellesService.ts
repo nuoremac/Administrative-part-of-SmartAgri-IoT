@@ -16,8 +16,6 @@ export class ParcellesService {
      * - **nom**: Nom de la parcelle (obligatoire)
      * - **terrain_id**: ID du terrain parent (obligatoire)
      * - **superficie**: Superficie en hectares (obligatoire)
-     * - **type_sol**: Type de sol
-     * - **systeme_irrigation**: Système d'irrigation utilisé
      *
      * La superficie totale des parcelles ne peut pas dépasser celle du terrain.
      * Un code unique sera automatiquement généré si non fourni.
@@ -92,7 +90,7 @@ export class ParcellesService {
      * Statistiques des parcelles d'un terrain
      * Obtenir les statistiques des parcelles d'un terrain.
      *
-     * Retourne le nombre de parcelles et la superficie totale par statut.
+     * Retourne le nombre de parcelles et la superficie totale.
      * @param terrainId
      * @returns any Successful Response
      * @throws ApiError
@@ -137,7 +135,6 @@ export class ParcellesService {
      * Mettre à jour les informations d'une parcelle.
      *
      * Seuls les champs fournis seront mis à jour.
-     * Si la culture actuelle est modifiée, l'ancienne culture sera archivée.
      * @param parcelleId
      * @param requestBody
      * @returns ParcelleResponse Successful Response

@@ -9,10 +9,6 @@ export type CapteurCreate = {
      */
     dev_eui: string;
     /**
-     * UUID de la Parcelle associée
-     */
-    parcelle_id?: (string | null);
-    /**
      *  code de reference associée
      */
     code: string;

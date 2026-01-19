@@ -15,28 +15,38 @@ import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class AuthenticationService {
     /**
-     * Register
-     * Inscription d'un nouvel utilisateur
-     *
-     * Args:
-     * user_data: Données de l'utilisateur à créer
-     * db: Session de base de données
-     *
-     * Returns:
-     * UserResponse: L'utilisateur créé
-     *
-     * Raises:
-     * HTTPException: Si l'email existe déjà
+     * Register User
+     * Inscription d'un utilisateur classique
      * @param requestBody
      * @returns UserResponse Successful Response
      * @throws ApiError
      */
-    public static registerApiV1AuthRegisterPost(
+    public static registerUserApiV1AuthRegisterUserPost(
         requestBody: UserCreate,
     ): CancelablePromise<UserResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/auth/register',
+            url: '/api/v1/auth/register/user',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Register Admin
+     * Inscription d'un administrateur
+     * @param requestBody
+     * @returns UserResponse Successful Response
+     * @throws ApiError
+     */
+    public static registerAdminApiV1AuthRegisterAdminPost(
+        requestBody: UserCreate,
+    ): CancelablePromise<UserResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/auth/register/admin',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

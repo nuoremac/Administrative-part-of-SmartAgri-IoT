@@ -10,8 +10,8 @@ import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class CapteursService {
     /**
-     * Créer un nouveau capteur
-     * Crée un capteur. Nécessite `nom`, `dev_eui`, `parcelle_id` et `date_installation`.
+     * Créer un nouveau capteur (Admin uniquement)
+     * Crée un capteur. Réservé aux administrateurs.
      * @param requestBody
      * @returns Capteur Successful Response
      * @throws ApiError
@@ -30,8 +30,8 @@ export class CapteursService {
         });
     }
     /**
-     * Lister tous les capteurs
-     * Récupère une liste paginée de tous les capteurs.
+     * Lister tous les capteurs (Admin uniquement)
+     * Récupère une liste complète de tous les capteurs. Réservé aux administrateurs.
      * @param skip
      * @param limit
      * @returns Capteur Successful Response
@@ -75,8 +75,8 @@ export class CapteursService {
         });
     }
     /**
-     * Mettre à jour un capteur existant
-     * Met à jour un capteur par son UUID.
+     * Mettre à jour un capteur existant (Admin uniquement)
+     * Met à jour un capteur. Réservé aux administrateurs.
      * @param capteurId
      * @param requestBody
      * @returns Capteur Successful Response
@@ -100,8 +100,8 @@ export class CapteursService {
         });
     }
     /**
-     * Supprimer un capteur
-     * Supprime un capteur par son UUID.
+     * Supprimer un capteur (Admin uniquement)
+     * Supprime un capteur. Réservé aux administrateurs.
      * @param capteurId
      * @returns Capteur Successful Response
      * @throws ApiError
@@ -135,6 +135,54 @@ export class CapteursService {
             url: '/api/v1/capteurs/code/{code}',
             path: {
                 'code': code,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Assigner un capteur à une parcelle
+     * Assigne un capteur à une parcelle. Accessible à tous les utilisateurs connectés.
+     * @param codeParcelle
+     * @param codeCapteur
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static assignCapteurApiV1CapteursAssignPost(
+        codeParcelle: string,
+        codeCapteur: string,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/capteurs/assign',
+            query: {
+                'code_parcelle': codeParcelle,
+                'code_capteur': codeCapteur,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Désassigner un capteur d'une parcelle
+     * Désassigne un capteur d'une parcelle. Accessible à tous les utilisateurs connectés.
+     * @param codeParcelle
+     * @param codeCapteur
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static desassignCapteurApiV1CapteursDesassignPost(
+        codeParcelle: string,
+        codeCapteur: string,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/capteurs/desassign',
+            query: {
+                'code_parcelle': codeParcelle,
+                'code_capteur': codeCapteur,
             },
             errors: {
                 422: `Validation Error`,

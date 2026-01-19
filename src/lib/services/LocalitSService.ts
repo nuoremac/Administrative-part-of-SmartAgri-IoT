@@ -13,22 +13,16 @@ import { request as __request } from '../core/request';
 export class LocalitSService {
     /**
      * Créer une nouvelle localité
-     * Créer une nouvelle localité avec ses coordonnées GPS et informations climatiques.
+     * Créer une nouvelle localité avec ses informations géographiques et climatiques.
      *
-     * **Coordonnées :**
-     * - **latitude**: -90 à 90
-     * - **longitude**: -180 à 180
-     * - **altitude**: Altitude en mètres (optionnel)
+     * **Champs requis :**
+     * - **nom**: Nom de la localité
+     * - **ville**: Nom de la ville
+     * - **pays**: Nom du pays
+     * - **continent**: Continent
      *
-     * **Adresse :**
-     * - **ville**: Nom de la ville (obligatoire)
-     * - **pays**: Nom du pays (obligatoire)
-     * - **continent**: Continent (obligatoire)
-     * - **quartier**, **region**, **code_postal**: Optionnels
-     *
-     * **Informations supplémentaires :**
-     * - **timezone**: Fuseau horaire (ex: "Africa/Douala")
-     * - **superficie**: Superficie en km²
+     * **Champs optionnels :**
+     * - **region**: Nom de la région
      * - **climate_zone**: Zone climatique
      * @param requestBody
      * @returns LocaliteResponse Successful Response
@@ -105,7 +99,6 @@ export class LocalitSService {
      * - Nombre total de localités
      * - Répartition par continent
      * - Répartition par zone climatique
-     * - Superficie totale couverte
      * @returns any Successful Response
      * @throws ApiError
      */
@@ -127,45 +120,6 @@ export class LocalitSService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/localites/localites/countries',
-        });
-    }
-    /**
-     * Localités à proximité
-     * Trouver les localités dans un rayon donné autour d'un point GPS.
-     *
-     * Utilise la formule de Haversine pour calculer les distances précises.
-     * Les résultats sont triés par distance croissante.
-     *
-     * **Paramètres :**
-     * - **latitude**: Latitude du point central (-90 à 90)
-     * - **longitude**: Longitude du point central (-180 à 180)
-     * - **radius_km**: Rayon de recherche en kilomètres (1 à 500)
-     *
-     * **Exemple :**
-     * Pour trouver les localités à 30km de Yaoundé (3.8667°N, 11.5167°E):
-     * `/localites/proximity?latitude=3.8667&longitude=11.5167&radius_km=30`
-     * @param latitude Latitude du point de référence
-     * @param longitude Longitude du point de référence
-     * @param radiusKm Rayon de recherche en km
-     * @returns LocaliteResponse Successful Response
-     * @throws ApiError
-     */
-    public static getLocalitesByProximityApiV1LocalitesLocalitesProximityGet(
-        latitude: number,
-        longitude: number,
-        radiusKm: number = 50,
-    ): CancelablePromise<Array<LocaliteResponse>> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/localites/localites/proximity',
-            query: {
-                'latitude': latitude,
-                'longitude': longitude,
-                'radius_km': radiusKm,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
         });
     }
     /**
@@ -217,7 +171,6 @@ export class LocalitSService {
      * Mettre à jour les informations d'une localité.
      *
      * Seuls les champs fournis seront mis à jour.
-     * Les coordonnées GPS ne peuvent pas être modifiées après création.
      * @param localiteId
      * @param requestBody
      * @returns LocaliteResponse Successful Response

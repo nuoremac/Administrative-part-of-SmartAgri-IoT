@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { clearAuthSession, getCurrentUser } from "@/lib/authSession";
-import { UserRole } from "@/lib/models/UserRole";
+import { clearUser, getUser } from "@/lib/mockSession";
+import { UserRole } from "@/lib/mockAuth";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useLang, type Lang } from "@/components/i18n/LangProvider";
@@ -104,7 +104,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   // protect admin area
   useEffect(() => {
-    const u = getCurrentUser();
+    const u = getUser();
     if (!u || u.role !== UserRole.ADMIN) router.replace("/login");
   }, [router]);
 
@@ -120,7 +120,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   );
 
   const logout = () => {
-    clearAuthSession();
+    clearUser();
     router.push("/login");
   };
 

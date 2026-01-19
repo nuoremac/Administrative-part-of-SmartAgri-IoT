@@ -5,7 +5,6 @@
 export type CapteurUpdate = {
     nom?: (string | null);
     dev_eui?: (string | null);
-    parcelle_id?: (string | null);
     date_installation?: (string | null);
     date_activation?: (string | null);
 };

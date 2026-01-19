@@ -2,7 +2,6 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { StatutTerrain } from '../models/StatutTerrain';
 import type { TerrainCreate } from '../models/TerrainCreate';
 import type { TerrainResponse } from '../models/TerrainResponse';
 import type { TerrainUpdate } from '../models/TerrainUpdate';
@@ -15,11 +14,8 @@ export class TerrainsService {
      * Créer un nouveau terrain agricole.
      *
      * - **nom**: Nom du terrain (obligatoire)
-     * - **type_terrain**: Type de terrain (agricole, pastoral, mixte, experimental)
+     * - **description**: Description du terrain
      * - **localite_id**: ID de la localité
-     * - **superficie_totale**: Superficie en hectares
-     * - **latitude**: Latitude GPS
-     * - **longitude**: Longitude GPS
      * @param requestBody
      * @returns TerrainResponse Successful Response
      * @throws ApiError
@@ -41,17 +37,15 @@ export class TerrainsService {
      * Récupérer tous les terrains
      * Récupérer tous les terrains de l'utilisateur connecté.
      *
-     * Possibilité de filtrer par statut et paginer les résultats.
+     * Possibilité de paginer les résultats.
      * @param skip Nombre d'éléments à ignorer
      * @param limit Nombre maximum d'éléments
-     * @param statut Filtrer par statut
      * @returns TerrainResponse Successful Response
      * @throws ApiError
      */
     public static getAllTerrainsApiV1TerrainsTerrainsGet(
         skip?: number,
         limit: number = 100,
-        statut?: (StatutTerrain | null),
     ): CancelablePromise<Array<TerrainResponse>> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -59,7 +53,6 @@ export class TerrainsService {
             query: {
                 'skip': skip,
                 'limit': limit,
-                'statut': statut,
             },
             errors: {
                 422: `Validation Error`,
@@ -70,7 +63,7 @@ export class TerrainsService {
      * Statistiques des terrains
      * Obtenir les statistiques des terrains de l'utilisateur.
      *
-     * Retourne le nombre de terrains et la superficie totale par statut.
+     * Retourne le nombre total de terrains.
      * @returns any Successful Response
      * @throws ApiError
      */
