@@ -13,7 +13,7 @@ export type MockUser = {
 const ADMIN_USER: MockUser = {
   id: "admin-1",
   email: "admin@smartagro.com",
-  role: "ADMIN",
+  role: UserRole.ADMIN,
 };
 
 // Mock admin security code
