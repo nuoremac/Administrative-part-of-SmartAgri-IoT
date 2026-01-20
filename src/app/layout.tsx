@@ -5,6 +5,11 @@ import ThemeProvider from "@/components/theme/ThemeProvider";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { AdminSearchProvider } from "@/components/admin/AdminSearchProvider";
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">

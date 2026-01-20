@@ -4,8 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { clearUser, getUser } from "@/lib/mockSession";
-import { UserRole } from "@/lib/mockAuth";
+import type { UserResponse } from "@/lib/models/UserResponse";
+import { AuthenticationService } from "@/lib/services/AuthenticationService";
+import { clearAuthSession, getAccessToken, getCurrentUser, saveCurrentUser } from "@/lib/authSession";
+import { UserRole_Output } from "@/lib/models/UserRole_Output";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useLang, type Lang } from "@/components/i18n/LangProvider";
@@ -75,6 +77,10 @@ function IconLogout() {
   );
 }
 
+function IconProfile() {
+  return <span className="text-sm">👤</span>;
+}
+
 // Nouvelles icônes pour le thème
 function IconSun() {
   return (
@@ -101,12 +107,84 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const { theme, toggleTheme } = useTheme();
   const { lang, setLang } = useLang();
   const { t } = useT();
+  const [currentUser, setCurrentUser] = useState<UserResponse | null>(null);
+
+  const resolveUser = (payload: unknown): UserResponse | null => {
+    if (!payload || typeof payload !== "object") return null;
+    if ("data" in payload) {
+      return (payload as { data: UserResponse }).data;
+    }
+    return payload as UserResponse;
+  };
 
   // protect admin area
   useEffect(() => {
-    const u = getUser();
-    if (!u || u.role !== UserRole.ADMIN) router.replace("/login");
+    let canceled = false;
+
+    const ensureAdmin = async () => {
+      const token = getAccessToken();
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      let u = getCurrentUser();
+      if (!u) {
+        try {
+          const fetched = await AuthenticationService.getCurrentUserInfoApiV1AuthMeGet();
+          if (canceled) return;
+          const resolved = resolveUser(fetched);
+          if (resolved) {
+            saveCurrentUser(resolved);
+            u = resolved;
+          }
+        } catch {
+          if (canceled) return;
+          router.replace("/login");
+          return;
+        }
+      }
+
+      const role = typeof u?.role === "string" ? u.role.toLowerCase() : "";
+      if (role !== UserRole_Output.ADMIN) {
+        router.replace("/login");
+        return;
+      }
+      if (!canceled) setCurrentUser(u || null);
+    };
+
+    void ensureAdmin();
+    return () => {
+      canceled = true;
+    };
   }, [router]);
+
+  const initials = useMemo(() => {
+    const first = currentUser?.prenom?.trim() || "";
+    const last = currentUser?.nom?.trim() || "";
+    const letters = `${first} ${last}`.trim();
+    if (!letters) return "A";
+    return letters
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase() || "")
+      .slice(0, 2)
+      .join("");
+  }, [currentUser?.prenom, currentUser?.nom]);
+
+  const displayName = useMemo(() => {
+    const first = currentUser?.prenom?.trim() || "";
+    const last = currentUser?.nom?.trim() || "";
+    const name = `${first} ${last}`.trim();
+    return name || "Admin";
+  }, [currentUser?.prenom, currentUser?.nom]);
+
+  const displayRole = useMemo(() => {
+    const role = typeof currentUser?.role === "string" ? currentUser.role.toLowerCase() : "";
+    if (role === "admin") return t("role_admin");
+    if (role === "user") return t("role_user");
+    return role || "Admin";
+  }, [currentUser?.role, t]);
 
   const nav: NavItem[] = useMemo(
     () => [
@@ -115,12 +193,13 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       { href: "/admin/terrains", label: t("nav_terrains"), icon: <IconTerrains /> },
       { href: "/admin/parcels", label: t("nav_parcels"), icon: <IconParcels /> },
       { href: "/admin/sensors", label: t("nav_sensors"), icon: <IconSensors /> },
+      { href: "/admin/profile", label: t("nav_profile"), icon: <IconProfile /> },
     ],
     [t]
   );
 
   const logout = () => {
-    clearUser();
+    clearAuthSession();
     router.push("/login");
   };
 
@@ -138,15 +217,15 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       <div className="px-3 pt-2">
         <div className="rounded-md bg-green-100 px-3 py-3 dark:bg-[#0d1117]">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-sm font-bold text-white">
-              A
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-green-950 dark:text-gray-100">
-                {t("admin_primary")}
-              </p>
-              <p className="truncate text-[11px] text-green-900/70 dark:text-gray-400">admin</p>
-            </div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-sm font-bold text-white">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-green-950 dark:text-gray-100">
+              {displayName}
+            </p>
+            <p className="truncate text-[11px] text-green-900/70 dark:text-gray-400">{displayRole}</p>
+          </div>
           </div>
         </div>
       </div>
@@ -189,8 +268,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   );
 
   return (
-    <div className="min-h-screen bg-[#dff7df] dark:bg-[#0d1117] dark:text-gray-100">
-      <div className="flex min-h-screen w-full">
+    <div className="min-h-[100dvh] overflow-x-hidden bg-[#dff7df] dark:bg-[#0d1117] dark:text-gray-100">
+      <div className="flex min-h-[100dvh] w-full">
         {/* Desktop sidebar */}
         <div className="hidden md:block">{Sidebar}</div>
 
@@ -287,7 +366,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           </header>
 
           {/* Page content */}
-          <main className="min-h-[calc(100vh-72px)] bg-[#eef8ee] px-3 py-3 text-gray-900 dark:bg-[#0d1117] dark:text-gray-100 sm:px-4">
+          <main className="min-h-[calc(100dvh-72px)] bg-[#eef8ee] px-3 py-3 text-gray-900 dark:bg-[#0d1117] dark:text-gray-100 sm:px-4">
             {children}
           </main>
         </div>

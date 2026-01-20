@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useT } from "@/components/i18n/useT";
@@ -42,9 +42,9 @@ export default function SensorsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [refreshKey, setRefreshKey] = useState(0);
   const [isAdding, setIsAdding] = useState(false);
-  const [draft, setDraft] = useState({ nom: "", dev_eui: "", code: "", parcelle_id: "" });
-
   const parcels = useMemo(() => listParcels({ limit: 200 }).items, []);
+  const defaultParcelId = parcels[0]?.id || "";
+  const [draft, setDraft] = useState({ nom: "", dev_eui: "", code: "", parcelle_id: defaultParcelId });
 
   const listResult = useMemo(() => {
     return listSensors({
@@ -58,12 +58,6 @@ export default function SensorsPage() {
 
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), totalPages);
-
-  useEffect(() => {
-    if (!draft.parcelle_id && parcels.length > 0) {
-      setDraft((prev) => ({ ...prev, parcelle_id: parcels[0].id }));
-    }
-  }, [draft.parcelle_id, parcels]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -95,7 +89,7 @@ export default function SensorsPage() {
                   nom: "",
                   dev_eui: "",
                   code: "",
-                  parcelle_id: prev.parcelle_id || parcels[0]?.id || "",
+                  parcelle_id: prev.parcelle_id || defaultParcelId,
                 }));
               }
             }}
@@ -171,7 +165,7 @@ export default function SensorsPage() {
                   nom: draft.nom.trim() || "Capteur",
                   dev_eui: draft.dev_eui.trim() || `AUTO-${Date.now()}`,
                   code: draft.code.trim() || `CPT-${Date.now()}`,
-                  parcelle_id: draft.parcelle_id || parcels[0]?.id || "",
+                  parcelle_id: draft.parcelle_id || defaultParcelId,
                   date_installation: now,
                   date_activation: now,
                 });
@@ -196,7 +190,7 @@ export default function SensorsPage() {
 
       <div className="overflow-hidden rounded-sm border border-gray-400 bg-white dark:border-gray-800 dark:bg-[#0d1117]">
         <div className="overflow-x-auto">
-          <table className="min-w-[980px] w-full text-left text-sm">
+          <table className="min-w-full md:min-w-[980px] w-full text-left text-sm">
             <thead className="sticky top-0 bg-white dark:bg-[#0d1117]">
               <tr className="border-b border-gray-400 dark:border-gray-800">
                 <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />

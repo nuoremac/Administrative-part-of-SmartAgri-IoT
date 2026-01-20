@@ -1,20 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import UserModal from "@/components/admin/users/UserModal";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useT } from "@/components/i18n/useT";
 import { useLang } from "@/components/i18n/LangProvider";
-import {
-  createUser,
-  listUsers,
-  updateUser,
-  type UserRow,
-} from "@/lib/mockUsers";
-import { listTerrains } from "@/lib/mockTerrains";
-import { listParcels } from "@/lib/mockParcels";
+import type { UserRow } from "@/lib/mockUsers";
+import type { UserResponse } from "@/lib/models/UserResponse";
+import { OpenAPI } from "@/lib/core/OpenAPI";
+import { getAccessToken } from "@/lib/authSession";
+import { UsersService } from "@/lib/services/UsersService";
 
 type SortKey = "nom";
 type SortDir = "asc" | "desc";
@@ -27,6 +23,8 @@ export default function AdminUsersPage() {
   const { query: q } = useAdminSearch();
 
   const [refreshKey, setRefreshKey] = useState(0);
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const [sortKey, setSortKey] = useState<SortKey>("nom");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -35,7 +33,92 @@ export default function AdminUsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editing, setEditing] = useState<UserRow | null>(null);
-  const [confirmUser, setConfirmUser] = useState<UserRow | null>(null);
+  const pushRef = useRef(push);
+  const tRef = useRef(t);
+
+  useEffect(() => {
+    pushRef.current = push;
+  }, [push]);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
+  const resolveUser = (payload: unknown): UserResponse | null => {
+    if (!payload || typeof payload !== "object") return null;
+    if ("data" in payload) {
+      return (payload as { data: UserResponse }).data;
+    }
+    return payload as UserResponse;
+  };
+
+  const resolveUserList = (payload: unknown): UserResponse[] => {
+    if (Array.isArray(payload)) return payload;
+    if (payload && typeof payload === "object" && "data" in payload) {
+      const data = (payload as { data: unknown }).data;
+      return Array.isArray(data) ? data : [];
+    }
+    return [];
+  };
+
+  const toUserRow = (u: UserResponse): UserRow => ({
+    id: u.id,
+    nom: u.nom ?? "",
+    prenom: u.prenom ?? "",
+    email: u.email ?? "",
+    telephone: u.telephone ?? "",
+    role: (u.role as UserRow["role"]) ?? "user",
+    preferences: {
+      langue: "fr",
+      theme: "light",
+      notifications: { email: true, push: true, sms: false },
+      unites: { temperature: "celsius", surface: "hectare", precipitation: "mm" },
+    },
+    status: "active",
+    avatar: u.avatar ?? "",
+    date_inscription: u.date_inscription ?? "",
+    dernier_acces: u.dernier_acces ?? "",
+    created_at: u.created_at ?? "",
+    updated_at: u.updated_at ?? "",
+  });
+
+  useEffect(() => {
+    let canceled = false;
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        let list = resolveUserList(await UsersService.getAllUsersApiV1UsersGet(undefined, 500));
+        if (!list.length) {
+          const token = getAccessToken();
+          const fallbackUrl = `${OpenAPI.BASE}/api/v1/users`;
+          const res = await fetch(fallbackUrl, {
+            headers: {
+              Accept: "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            list = resolveUserList(json);
+          }
+        }
+        if (canceled) return;
+        setUsers(list.map((u) => toUserRow(resolveUser(u) ?? (u as UserResponse))));
+      } catch {
+        if (!canceled) {
+          pushRef.current({ title: tRef.current("load_failed"), kind: "error" });
+        }
+      } finally {
+        if (!canceled) setLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      canceled = true;
+    };
+  }, [refreshKey, lang]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -47,35 +130,38 @@ export default function AdminUsersPage() {
   };
 
   const listResult = useMemo(() => {
-    return listUsers({
-      search: q,
-      sortKey,
-      sortDir,
-      skip: (page - 1) * PAGE_SIZE,
-      limit: PAGE_SIZE,
+    const search = q.trim().toLowerCase();
+    const filtered = users.filter((u) => {
+      if (!search) return true;
+      return (
+        u.nom.toLowerCase().includes(search) ||
+        u.prenom.toLowerCase().includes(search) ||
+        u.email.toLowerCase().includes(search) ||
+        u.telephone.toLowerCase().includes(search)
+      );
     });
-  }, [q, sortKey, sortDir, page, refreshKey]);
 
-  const parcelsByUser = useMemo(() => {
-    const terrains = listTerrains().items;
-    const parcels = listParcels().items;
-    const terrainOwner = new Map(terrains.map((t) => [t.id, t.user_id]));
-    const counts = new Map<string, number>();
-    parcels.forEach((p) => {
-      const ownerId = terrainOwner.get(p.terrain_id);
-      if (!ownerId) return;
-      counts.set(ownerId, (counts.get(ownerId) ?? 0) + 1);
+    const sorted = [...filtered].sort((a, b) => {
+      const left = a[sortKey].toLowerCase();
+      const right = b[sortKey].toLowerCase();
+      if (left === right) return 0;
+      const dir = sortDir === "asc" ? 1 : -1;
+      return left > right ? dir : -dir;
     });
-    return counts;
-  }, [refreshKey]);
+
+    const total = sorted.length;
+    const start = (page - 1) * PAGE_SIZE;
+    const items = sorted.slice(start, start + PAGE_SIZE);
+    return { total, items };
+  }, [q, page, sortDir, sortKey, users]);
+
+  const parcelsByUser = useMemo(() => new Map<string, number>(), []);
 
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), totalPages);
 
   const openCreate = () => {
-    setModalMode("create");
-    setEditing(null);
-    setModalOpen(true);
+    push({ title: t("feature_unavailable"), kind: "error" });
   };
 
   const openEdit = (u: UserRow) => {
@@ -84,7 +170,7 @@ export default function AdminUsersPage() {
     setModalOpen(true);
   };
 
-  const onSubmitModal = (data: Omit<UserRow, "id">) => {
+  const onSubmitModal = async (data: Omit<UserRow, "id">) => {
     if (!data.nom?.trim() || !data.prenom?.trim() || !data.email?.trim()) {
       push({
         title: t("invalidCredentials"),
@@ -94,54 +180,26 @@ export default function AdminUsersPage() {
       return;
     }
 
-    if (modalMode === "create") {
-      const created = createUser(data);
-      setRefreshKey((k) => k + 1);
-      setModalOpen(false);
-      setPage(1);
-      push({
-        title: t("add_user"),
-        message: `${created.prenom} ${created.nom}`,
-        kind: "success",
-      });
-      return;
-    }
-
     if (editing) {
-      const updated = updateUser(editing.id, data);
-      setRefreshKey((k) => k + 1);
-      setModalOpen(false);
-      push({
-        title: t("edit_user"),
-        message: updated ? `${updated.prenom} ${updated.nom}` : t("save"),
-        kind: "success",
-      });
-    }
-  };
-
-  const confirmSuspend = () => {
-    if (!confirmUser) return;
-    const previousStatus = confirmUser.status;
-    const updated = updateUser(confirmUser.id, { status: "suspended" });
-    setConfirmUser(null);
-    if (!updated) return;
-
-    setRefreshKey((k) => k + 1);
-
-    push({
-      title: t("suspend_toast_title"),
-      message: `${updated.prenom} ${updated.nom}`,
-      actionLabel: t("undo"),
-      onAction: () => {
-        updateUser(updated.id, { status: previousStatus });
-        setRefreshKey((k) => k + 1);
+      try {
+        const updated = await UsersService.updateUserApiV1UsersUserIdPut(editing.id, {
+          nom: data.nom.trim(),
+          prenom: data.prenom.trim(),
+          telephone: data.telephone.trim() || null,
+          avatar: data.avatar.trim() || null,
+        });
+        const resolved = resolveUser(updated) ?? (updated as UserResponse);
+        setUsers((prev) => prev.map((u) => (u.id === editing.id ? toUserRow(resolved) : u)));
+        setModalOpen(false);
         push({
-          title: t("suspend_toast_undo"),
-          message: `${updated.prenom} ${updated.nom}`,
+          title: t("edit_user"),
+          message: `${data.prenom} ${data.nom}`,
           kind: "success",
         });
-      },
-    });
+      } catch {
+        push({ title: t("profile_update_failed"), kind: "error" });
+      }
+    }
   };
 
   return (
@@ -157,7 +215,9 @@ export default function AdminUsersPage() {
         <button
           type="button"
           onClick={openCreate}
-          className="h-9 rounded-sm bg-green-600 px-3 text-xs font-semibold text-white hover:bg-green-700"
+          className="h-9 rounded-sm bg-green-600 px-3 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
+          disabled
+          title={t("feature_unavailable")}
         >
           + {t("add_user")}
         </button>
@@ -172,7 +232,7 @@ export default function AdminUsersPage() {
 
       <div className="overflow-hidden rounded-sm border border-gray-300 bg-white shadow-sm dark:border-gray-800 dark:bg-[#0d1117]">
         <div className="overflow-x-auto">
-          <table className="min-w-[980px] w-full text-left text-sm">
+          <table className="min-w-full md:min-w-[980px] w-full text-left text-sm">
             <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
               <tr className="border-b border-gray-200 dark:border-gray-800">
                 <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
@@ -186,7 +246,13 @@ export default function AdminUsersPage() {
             </thead>
 
             <tbody>
-              {listResult.items.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
+                    {t("loading")}
+                  </td>
+                </tr>
+              ) : listResult.items.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
                     {t("empty_users")}
@@ -243,8 +309,9 @@ export default function AdminUsersPage() {
 
                         <button
                           type="button"
-                          onClick={() => setConfirmUser(u)}
-                          className="rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600"
+                          className="rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-70"
+                          disabled
+                          title={t("feature_unavailable")}
                         >
                           {t("suspend")}
                         </button>
@@ -275,16 +342,6 @@ export default function AdminUsersPage() {
         initial={editing}
         onClose={() => setModalOpen(false)}
         onSubmit={onSubmitModal}
-      />
-
-      <ConfirmDialog
-        open={!!confirmUser}
-        title={t("suspend_confirm_title")}
-        message={t("suspend_confirm_body")}
-        confirmLabel={t("suspend")}
-        cancelLabel={t("cancel")}
-        onConfirm={confirmSuspend}
-        onCancel={() => setConfirmUser(null)}
       />
     </div>
   );

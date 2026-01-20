@@ -196,7 +196,7 @@ export default function TerrainsPage() {
 
       <div className="overflow-hidden rounded-sm border border-gray-300 bg-white shadow-sm dark:border-gray-800 dark:bg-[#0d1117]">
         <div className="overflow-x-auto">
-          <table className="min-w-[980px] w-full text-left text-sm">
+          <table className="min-w-full md:min-w-[980px] w-full text-left text-sm">
             <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
               <tr className="border-b border-gray-200 dark:border-gray-800">
                 <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
