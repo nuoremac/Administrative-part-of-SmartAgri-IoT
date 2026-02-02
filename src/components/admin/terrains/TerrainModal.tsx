@@ -2,13 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useT } from "@/components/i18n/useT";
-import { formatLocalite, type Localite } from "@/lib/mockLocalites";
-import type { TerrainRow } from "@/lib/mockTerrains";
+import type { LocaliteResponse } from "@/lib/models/LocaliteResponse";
+import type { TerrainResponse } from "@/lib/models/TerrainResponse";
 
 type FormState = {
   nom: string;
-  user_id: string;
-  superficie_totale: string;
   localite_id: string;
 };
 
@@ -23,18 +21,16 @@ export default function TerrainModal({
 }: {
   open: boolean;
   mode: "create" | "edit";
-  initial: TerrainRow | null;
-  localites: Localite[];
+  initial: TerrainResponse | null;
+  localites: LocaliteResponse[];
   onClose: () => void;
-  onSubmit: (data: { nom: string; user_id: string; superficie_totale: number; localite_id: string }) => void;
+  onSubmit: (data: { nom: string; localite_id: string }) => void;
   onAddLocalite: () => void;
 }) {
   const { t } = useT();
   const initialForm = useMemo(
     () => ({
       nom: initial?.nom ?? "",
-      user_id: initial?.user_id ?? "",
-      superficie_totale: initial?.superficie_totale ? String(initial.superficie_totale) : "",
       localite_id: initial?.localite_id ?? (localites[0]?.id ?? ""),
     }),
     [initial, localites]
@@ -42,7 +38,7 @@ export default function TerrainModal({
   const [form, setForm] = useState<FormState>(initialForm);
 
   const localiteOptions = useMemo(() => {
-    return localites.map((l) => ({ id: l.id, label: formatLocalite(l) }));
+    return localites.map((l) => ({ id: l.id, label: `${l.nom} — ${l.ville}, ${l.pays}` }));
   }, [localites]);
 
   if (!open) return null;
@@ -60,26 +56,6 @@ export default function TerrainModal({
             <input
               value={form.nom}
               onChange={(e) => setForm((f) => ({ ...f, nom: e.target.value }))}
-              className="h-9 w-full rounded-sm border border-gray-300 px-2 outline-none focus:border-green-600
-                         dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block font-semibold">{t("terrain_owner")}</span>
-            <input
-              value={form.user_id}
-              onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
-              className="h-9 w-full rounded-sm border border-gray-300 px-2 outline-none focus:border-green-600
-                         dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block font-semibold">{t("terrain_area")}</span>
-            <input
-              value={form.superficie_totale}
-              onChange={(e) => setForm((f) => ({ ...f, superficie_totale: e.target.value }))}
               className="h-9 w-full rounded-sm border border-gray-300 px-2 outline-none focus:border-green-600
                          dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
             />
@@ -130,8 +106,6 @@ export default function TerrainModal({
             onClick={() =>
               onSubmit({
                 nom: form.nom.trim(),
-                user_id: form.user_id.trim(),
-                superficie_totale: Number(form.superficie_totale) || 0,
                 localite_id: form.localite_id,
               })
             }

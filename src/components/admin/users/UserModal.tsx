@@ -6,7 +6,7 @@ import type { UserRow, UserRole, UserStatus } from "@/lib/mockUsers";
 
 type Mode = "create" | "edit";
 
-type UserDraft = Omit<UserRow, "id">;
+type UserDraft = Omit<UserRow, "id"> & { password?: string };
 
 function toDraft(initial: UserRow | null | undefined, mode: Mode): UserDraft {
   const nowIso = new Date().toISOString();
@@ -73,6 +73,7 @@ export default function UserModal({
   // Important: this state is created when component mounts.
   // We'll force remount from parent by passing a changing `key` to <UserModal />.
   const [form, setForm] = useState<UserDraft>(initialDraft);
+  const [password, setPassword] = useState("");
   const { t } = useT();
 
   if (!open) return null;
@@ -131,6 +132,17 @@ export default function UserModal({
             />
           </Field>
 
+          {mode === "create" ? (
+            <Field label={t("password")} className="sm:col-span-2">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          ) : null}
+
           <Field label={t("table_status")}>
             <select
               value={form.status}
@@ -175,6 +187,7 @@ export default function UserModal({
                 prenom: form.prenom.trim(),
                 email: form.email.trim(),
                 telephone: form.telephone.trim(),
+                password: mode === "create" ? password : undefined,
                 updated_at: new Date().toISOString(),
               })
             }

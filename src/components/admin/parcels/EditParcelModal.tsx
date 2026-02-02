@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ParcelRow } from "@/lib/mockParcels";
+import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
 import { useT } from "@/components/i18n/useT";
 
 export default function EditParcelModal({
@@ -11,9 +11,9 @@ export default function EditParcelModal({
   onSave,
 }: {
   open: boolean;
-  parcel: ParcelRow;
+  parcel: ParcelleResponse;
   onClose: () => void;
-  onSave: (patch: { nom: string; superficie: number; nombre_capteurs: number }) => void;
+  onSave: (patch: { nom: string; superficie: number }) => void;
 }) {
   const { t } = useT();
   // ✅ hooks always run; modal returns null after hooks
@@ -21,14 +21,12 @@ export default function EditParcelModal({
     () => ({
       nom: parcel.nom ?? "",
       superficie: parcel.superficie ?? 0,
-      nombre_capteurs: parcel.nombre_capteurs ?? 0,
     }),
     [parcel]
   );
 
   const [nom, setNom] = useState(defaults.nom);
   const [superficie, setSuperficie] = useState(String(defaults.superficie));
-  const [capteurs, setCapteurs] = useState(String(defaults.nombre_capteurs));
   const [error, setError] = useState<string | null>(null);
 
   // reset when parcel changes (key-based remount used by parent)
@@ -38,13 +36,10 @@ export default function EditParcelModal({
     setError(null);
 
     const a = Number(superficie);
-    const s = Number(capteurs);
-
     if (!nom.trim()) return setError(t("parcel_error_name"));
     if (!Number.isFinite(a) || a <= 0) return setError(t("parcel_error_area"));
-    if (!Number.isFinite(s) || s < 0) return setError(t("parcel_error_sensors"));
 
-    onSave({ nom: nom.trim(), superficie: Math.round(a), nombre_capteurs: Math.round(s) });
+    onSave({ nom: nom.trim(), superficie: Math.round(a) });
   };
 
   if (!open) return null;
@@ -101,15 +96,6 @@ export default function EditParcelModal({
             />
           </Field>
 
-          <Field label={t("table_sensors")}>
-            <input
-              value={capteurs}
-              onChange={(e) => setCapteurs(e.target.value)}
-              inputMode="numeric"
-              className="h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
-                         focus:border-green-600 dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
-            />
-          </Field>
         </div>
 
         {error ? (

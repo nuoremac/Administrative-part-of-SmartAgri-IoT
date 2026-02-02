@@ -1,9 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useT } from "@/components/i18n/useT";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
+import type { Capteur } from "@/lib/models/Capteur";
+import type { LocaliteResponse } from "@/lib/models/LocaliteResponse";
+import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
+import type { RecommendationResponse } from "@/lib/models/RecommendationResponse";
+import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
+import type { TerrainResponse } from "@/lib/models/TerrainResponse";
+import type { UserResponse } from "@/lib/models/UserResponse";
+import { fetchAllMeasurements, fetchAllParcels, fetchLocalites, fetchSensors, fetchTerrains, fetchUsers } from "@/lib/apiData";
+import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
+import { RecommandationsService } from "@/lib/services/RecommandationsService";
+import { unwrapList } from "@/lib/apiHelpers";
 
 type AlertLevel = "critical" | "warning" | "info";
 
@@ -27,38 +38,213 @@ export default function AdminDashboardPage() {
   const { query } = useAdminSearch();
   const search = query.trim().toLowerCase();
   const [range, setRange] = useState<"24h" | "7d" | "30d">("24h");
+  const [users, setUsers] = useState<UserResponse[]>([]);
+  const [terrains, setTerrains] = useState<TerrainResponse[]>([]);
+  const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
+  const [sensors, setSensors] = useState<Capteur[]>([]);
+  const [localites, setLocalites] = useState<LocaliteResponse[]>([]);
+  const [recommendations, setRecommendations] = useState<RecommendationResponse[]>([]);
+  const [measurements, setMeasurements] = useState<SensorMeasurementsResponse[]>([]);
+  const [selectedParcelId, setSelectedParcelId] = useState<string>("");
+  const [parcelMeasurements, setParcelMeasurements] = useState<SensorMeasurementsResponse[]>([]);
+  const [showCharts, setShowCharts] = useState(false);
 
-  // API-driven widgets (mocked but shaped to backend)
+  useEffect(() => {
+    let canceled = false;
+    const load = async () => {
+      try {
+        const [userList, terrainList, sensorList, localiteList] = await Promise.all([
+          fetchUsers(),
+          fetchTerrains(),
+          fetchSensors(),
+          fetchLocalites(),
+        ]);
+        const parcelList = await fetchAllParcels(terrainList);
+        const measurementList = await fetchAllMeasurements(200);
+        const recommendationPayload = await RecommandationsService.getAllRecommendationsApiV1RecommendationsGet(undefined, 50);
+        if (canceled) return;
+        setUsers(userList);
+        setTerrains(terrainList);
+        setSensors(sensorList);
+        setLocalites(localiteList);
+        setParcels(parcelList);
+        setMeasurements(measurementList);
+        setRecommendations(unwrapList<RecommendationResponse>(recommendationPayload));
+      } catch {
+        if (!canceled) {
+          setUsers([]);
+          setTerrains([]);
+          setSensors([]);
+          setLocalites([]);
+          setParcels([]);
+          setMeasurements([]);
+          setRecommendations([]);
+        }
+      } finally {
+      }
+    };
+    void load();
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const id = setTimeout(() => setShowCharts(true), 0);
+    return () => clearTimeout(id);
+  }, []);
+
   const kpis = [
-    { label: t("dashboard_kpi_users"), value: 128, meta: t("dashboard_kpi_users_meta"), tone: "emerald" as const },
-    { label: t("dashboard_kpi_terrains"), value: 42, meta: t("dashboard_kpi_terrains_meta"), tone: "teal" as const },
-    { label: t("dashboard_kpi_parcels"), value: 186, meta: t("dashboard_kpi_parcels_meta"), tone: "amber" as const },
-    { label: t("dashboard_kpi_sensors"), value: 214, meta: t("dashboard_kpi_sensors_meta"), tone: "blue" as const },
+    { label: t("dashboard_kpi_users"), value: users.length, meta: t("dashboard_kpi_users_meta"), tone: "emerald" as const },
+    { label: t("dashboard_kpi_terrains"), value: terrains.length, meta: t("dashboard_kpi_terrains_meta"), tone: "teal" as const },
+    { label: t("dashboard_kpi_parcels"), value: parcels.length, meta: t("dashboard_kpi_parcels_meta"), tone: "amber" as const },
+    { label: t("dashboard_kpi_sensors"), value: sensors.length, meta: t("dashboard_kpi_sensors_meta"), tone: "blue" as const },
   ];
 
-  const alerts: Alert[] = [
-    { id: "a1", level: "critical", title: t("dashboard_alert_humidity_low"), subtitle: "Parcelle A • Terrain Nord", time: "5 min" },
-    { id: "a2", level: "warning", title: t("dashboard_alert_ph_out"), subtitle: "Parcelle D • Terrain Ouest", time: "22 min" },
-    { id: "a3", level: "info", title: t("dashboard_alert_temperature"), subtitle: "Parcelle C • Terrain Sud", time: "1 h" },
-  ];
+  const parcelMap = useMemo(() => new Map(parcels.map((p) => [p.id, p])), [parcels]);
+  const sensorMap = useMemo(() => new Map(sensors.map((s) => [s.id, s])), [sensors]);
 
-  const recommendations: Recommendation[] = [
-    { id: "r1", title: t("dashboard_rec_irrigation"), parcel: "Parcelle A", time: "10 min" },
-    { id: "r2", title: t("dashboard_rec_fertilizer"), parcel: "Parcelle C", time: "1 h" },
-    { id: "r3", title: t("dashboard_rec_ph"), parcel: "Parcelle D", time: "2 h" },
-  ];
+  useEffect(() => {
+    if (!parcels.length) return;
+    if (selectedParcelId) return;
+    setSelectedParcelId(parcels[0].id);
+  }, [parcels, selectedParcelId]);
 
-  const latestMeasurements = [
-    { id: "m1", devEui: "70B3D57ED005E321", parcel: "Parcelle A", humidity: "41%", temperature: "24°C", time: "3 min" },
-    { id: "m2", devEui: "70B3D57ED005E322", parcel: "Parcelle B", humidity: "55%", temperature: "22°C", time: "9 min" },
-    { id: "m3", devEui: "70B3D57ED005E323", parcel: "Parcelle C", humidity: "49%", temperature: "23°C", time: "18 min" },
-  ];
+  useEffect(() => {
+    let canceled = false;
+    const loadParcelMeasurements = async () => {
+      if (!selectedParcelId) return;
+      try {
+        const now = new Date();
+        const endDate = now.toISOString();
+        const days = range === "24h" ? 1 : range === "7d" ? 7 : 30;
+        const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+        const payload = await DonnEsDeCapteursService.getMeasurementsByParcelleApiV1SensorDataSensorDataParcelleParcelleIdGet(
+          selectedParcelId,
+          undefined,
+          200,
+          startDate,
+          endDate
+        );
+        const list = unwrapList<SensorMeasurementsResponse>(payload);
+        if (canceled) return;
+        setParcelMeasurements(list);
+      } catch {
+        if (!canceled) setParcelMeasurements([]);
+      }
+    };
+    void loadParcelMeasurements();
+    return () => {
+      canceled = true;
+    };
+  }, [range, selectedParcelId]);
 
-  const localiteCoverage = [
-    { id: "l1", name: "Douala", climate: "tropical", terrains: 14 },
-    { id: "l2", name: "Yaounde", climate: "savane", terrains: 11 },
-    { id: "l3", name: "Bafoussam", climate: "montagne", terrains: 8 },
-  ];
+  const latestMeasurements = useMemo(() => {
+    const sorted = measurements
+      .slice()
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return sorted.slice(0, 3).map((m) => {
+      const sensor = sensorMap.get(m.capteur_id);
+      const parcel = parcelMap.get(m.parcelle_id);
+      return {
+        id: m.id,
+        devEui: sensor?.dev_eui ?? "—",
+        parcel: parcel?.nom ?? m.parcelle_id,
+        humidity: m.humidity != null ? `${m.humidity}%` : "—",
+        temperature: m.temperature != null ? `${m.temperature}°C` : "—",
+        time: formatAgo(m.timestamp),
+      };
+    });
+  }, [measurements, parcelMap, sensorMap]);
+
+  const localiteCoverage = useMemo(() => {
+    const countByLocalite = terrains.reduce((acc, terrain) => {
+      acc.set(terrain.localite_id, (acc.get(terrain.localite_id) ?? 0) + 1);
+      return acc;
+    }, new Map<string, number>());
+    return localites
+      .map((localite) => ({
+        id: localite.id,
+        name: localite.ville || localite.nom,
+        climate: localite.climate_zone ?? "—",
+        terrains: countByLocalite.get(localite.id) ?? 0,
+      }))
+      .sort((a, b) => b.terrains - a.terrains)
+      .slice(0, 3);
+  }, [localites, terrains]);
+
+  const alerts: Alert[] = useMemo(() => {
+    const sorted = measurements
+      .slice()
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const alertsList: Alert[] = [];
+    for (const m of sorted) {
+      if (alertsList.length >= 3) break;
+      const parcel = parcelMap.get(m.parcelle_id);
+      const title =
+        m.humidity != null && m.humidity < 35
+          ? t("dashboard_alert_humidity_low")
+          : m.ph != null && (m.ph < 5.5 || m.ph > 7.5)
+          ? t("dashboard_alert_ph_out")
+          : m.temperature != null && m.temperature > 32
+          ? t("dashboard_alert_temperature")
+          : null;
+      if (!title) continue;
+      alertsList.push({
+        id: m.id,
+        level: m.humidity != null && m.humidity < 35 ? "warning" : "info",
+        title,
+        subtitle: parcel ? parcel.nom : m.parcelle_id,
+        time: formatAgo(m.timestamp),
+      });
+    }
+    return alertsList;
+  }, [measurements, parcelMap, t]);
+
+  const sensorStatus = useMemo(() => {
+    const latestBySensor = new Map<string, SensorMeasurementsResponse>();
+    for (const m of measurements) {
+      const prev = latestBySensor.get(m.capteur_id);
+      if (!prev || new Date(m.timestamp).getTime() > new Date(prev.timestamp).getTime()) {
+        latestBySensor.set(m.capteur_id, m);
+      }
+    }
+
+    const now = Date.now();
+    let online = 0;
+    let offline = 0;
+    latestBySensor.forEach((m) => {
+      const ageMs = now - new Date(m.timestamp).getTime();
+      if (ageMs <= 24 * 60 * 60 * 1000) {
+        online += 1;
+      } else {
+        offline += 1;
+      }
+    });
+
+    const lastIngest = measurements.length
+      ? measurements.slice().sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0].timestamp
+      : null;
+
+    return {
+      online,
+      offline,
+      total: sensors.length,
+      lastIngest,
+    };
+  }, [measurements, sensors.length]);
+
+  const recs: Recommendation[] = useMemo(() => {
+    return recommendations.slice(0, 4).map((r) => {
+      const parcel = parcelMap.get(String(r.parcelle_id));
+      return {
+        id: String(r.id),
+        title: r.titre,
+        parcel: parcel?.nom ?? String(r.parcelle_id),
+        time: formatAgo(r.date_creation),
+      };
+    });
+  }, [recommendations, parcelMap]);
 
   const filteredAlerts = useMemo(() => {
     if (!search) return alerts;
@@ -68,26 +254,50 @@ export default function AdminDashboardPage() {
   }, [alerts, search]);
 
   const filteredRecommendations = useMemo(() => {
-    if (!search) return recommendations;
-    return recommendations.filter(
+    if (!search) return recs;
+    return recs.filter(
       (r) => r.title.toLowerCase().includes(search) || r.parcel.toLowerCase().includes(search)
     );
-  }, [recommendations, search]);
+  }, [recs, search]);
 
-  const humidityTrendBase = [38, 40, 41, 39, 43, 45, 44, 46, 48, 47, 49, 51];
-  const temperatureTrendBase = [22, 22.5, 23, 23.4, 23.1, 23.8, 24.1, 24.6, 24.2, 24.8, 25.1, 24.7];
-  const phTrendBase = [6.2, 6.3, 6.25, 6.35, 6.4, 6.38, 6.45, 6.5, 6.55, 6.48, 6.6, 6.52];
   const trendSize = range === "24h" ? 6 : range === "7d" ? 9 : 12;
-  const humidityTrend = humidityTrendBase.slice(-trendSize);
-  const temperatureTrend = temperatureTrendBase.slice(-trendSize);
-  const phTrend = phTrendBase.slice(-trendSize);
+  const trendBase = parcelMeasurements
+    .slice()
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .slice(-trendSize);
+  const humidityTrend = trendBase.map((m) => m.humidity ?? 0);
+  const temperatureTrend = trendBase.map((m) => m.temperature ?? 0);
+  const phTrend = trendBase.map((m) => m.ph ?? 0);
 
-  const timeline = [
-    { id: "t1", title: t("dashboard_timeline_sensor"), meta: "Sensor #12 • Parcelle C", time: "6 min" },
-    { id: "t2", title: t("dashboard_timeline_parcel"), meta: "Parcelle A • 2.1 ha", time: "18 min" },
-    { id: "t3", title: t("dashboard_timeline_user"), meta: "farmer_07 • role user", time: "45 min" },
-    { id: "t4", title: t("dashboard_timeline_alert"), meta: "Humidity low • Parcelle D", time: "1 h" },
-  ];
+  const timeline = useMemo(() => {
+    const measurementEvents = measurements
+      .slice()
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 3)
+      .map((m) => ({
+        id: `m-${m.id}`,
+        title: t("dashboard_timeline_sensor"),
+        meta: parcelMap.get(m.parcelle_id)?.nom ?? m.parcelle_id,
+        time: formatAgo(m.timestamp),
+        ts: new Date(m.timestamp).getTime(),
+      }));
+
+    const recommendationEvents = recommendations
+      .slice()
+      .sort((a, b) => new Date(b.date_creation).getTime() - new Date(a.date_creation).getTime())
+      .slice(0, 2)
+      .map((r) => ({
+        id: `r-${r.id}`,
+        title: t("dashboard_timeline_alert"),
+        meta: r.titre,
+        time: formatAgo(r.date_creation),
+        ts: new Date(r.date_creation).getTime(),
+      }));
+
+    return [...measurementEvents, ...recommendationEvents]
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 4);
+  }, [measurements, recommendations, parcelMap, t]);
 
   return (
     <div className="space-y-4">
@@ -164,12 +374,39 @@ export default function AdminDashboardPage() {
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-12">
         <div className="space-y-3 lg:col-span-8">
-          <Card title={t("dashboard_trends")} right={<span className="text-[11px] text-gray-500 dark:text-gray-400">{range}</span>}>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <TrendPanel title={t("dashboard_trend_humidity")} unit="%" data={humidityTrend} tone="emerald" />
-              <TrendPanel title={t("dashboard_trend_temperature")} unit="°C" data={temperatureTrend} tone="blue" />
-              <TrendPanel title={t("dashboard_trend_ph")} unit="" data={phTrend} tone="amber" />
-            </div>
+          <Card
+            title={t("dashboard_trends")}
+            right={
+              <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                <select
+                  value={selectedParcelId}
+                  onChange={(e) => setSelectedParcelId(e.target.value)}
+                  className="h-7 rounded-sm border border-gray-200 bg-white px-2 text-[11px] text-gray-700 outline-none
+                             dark:border-gray-700 dark:bg-[#0d1117] dark:text-gray-200"
+                >
+                  {parcels.length === 0 ? (
+                    <option value="">{t("empty_parcels")}</option>
+                  ) : (
+                    parcels.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nom}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <span>{range}</span>
+              </div>
+            }
+          >
+            {showCharts ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <TrendPanel title={t("dashboard_trend_humidity")} unit="%" data={humidityTrend} tone="emerald" />
+                <TrendPanel title={t("dashboard_trend_temperature")} unit="°C" data={temperatureTrend} tone="blue" />
+                <TrendPanel title={t("dashboard_trend_ph")} unit="" data={phTrend} tone="amber" />
+              </div>
+            ) : (
+              <div className="h-24 rounded-sm bg-gray-100 dark:bg-[#161b22]" />
+            )}
           </Card>
 
           <Card title={t("dashboard_alerts")} right={<span className="text-[11px] text-gray-500 dark:text-gray-400">{filteredAlerts.length}</span>}>
@@ -251,10 +488,16 @@ export default function AdminDashboardPage() {
 
           <Card title={t("dashboard_system_status")}>
             <div className="grid grid-cols-2 gap-2">
-              <MiniStat label={t("dashboard_gateways_online")} value="3/4" />
-              <MiniStat label={t("dashboard_last_ingest")} value="2 min" />
-              <MiniStat label={t("dashboard_low_battery")} value="2" />
-              <MiniStat label={t("dashboard_offline")} value="3" />
+              <MiniStat
+                label={t("dashboard_gateways_online")}
+                value={`${sensorStatus.online}/${sensorStatus.total || 0}`}
+              />
+              <MiniStat
+                label={t("dashboard_last_ingest")}
+                value={sensorStatus.lastIngest ? formatAgo(sensorStatus.lastIngest) : "—"}
+              />
+              <MiniStat label={t("dashboard_low_battery")} value={`${alerts.length}`} />
+              <MiniStat label={t("dashboard_offline")} value={`${sensorStatus.offline}`} />
             </div>
           </Card>
         </div>
@@ -431,4 +674,16 @@ function Sparkline({ data, tone }: { data: number[]; tone: "emerald" | "amber" |
       <polyline points={points} fill="none" stroke={stroke} strokeWidth="2" />
     </svg>
   );
+}
+
+function formatAgo(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `${days} d`;
 }

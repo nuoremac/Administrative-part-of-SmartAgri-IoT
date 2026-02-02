@@ -1,22 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useT } from "@/components/i18n/useT";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import TerrainModal from "@/components/admin/terrains/TerrainModal";
 import LocaliteModal from "@/components/admin/terrains/LocaliteModal";
-import { formatLocalite, getLocalite, listLocalites } from "@/lib/mockLocalites";
-import {
-  deleteTerrain,
-  getTerrain,
-  restoreTerrain,
-  updateTerrain,
-  type TerrainRow,
-} from "@/lib/mockTerrains";
-import { createLocalite } from "@/lib/mockLocalites";
-import { listParcels } from "@/lib/mockParcels";
+import type { LocaliteResponse } from "@/lib/models/LocaliteResponse";
+import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
+import type { TerrainResponse } from "@/lib/models/TerrainResponse";
+import { fetchLocalites, fetchParcelsByTerrain } from "@/lib/apiData";
+import { LocalitSService } from "@/lib/services/LocalitSService";
+import { TerrainsService } from "@/lib/services/TerrainsService";
+import { unwrapData } from "@/lib/apiHelpers";
+import { Continent } from "@/lib/models/Continent";
+import { ClimateZone } from "@/lib/models/ClimateZone";
 
 export default function TerrainDetailsPage() {
   const router = useRouter();
@@ -30,65 +29,111 @@ export default function TerrainDetailsPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [localiteOpen, setLocaliteOpen] = useState(false);
+  const [terrain, setTerrain] = useState<TerrainResponse | null>(null);
+  const [localites, setLocalites] = useState<LocaliteResponse[]>([]);
+  const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const terrain = id ? getTerrain(id) : undefined;
-  const localites = listLocalites().items;
-  const localite = terrain?.localite_id ? getLocalite(terrain.localite_id) : undefined;
+  useEffect(() => {
+    let canceled = false;
+    const load = async () => {
+      if (!id) return;
+      setLoading(true);
+      try {
+        const [terrainPayload, localiteList] = await Promise.all([
+          TerrainsService.getTerrainApiV1TerrainsTerrainsTerrainIdGet(id),
+          fetchLocalites(),
+        ]);
+        const terrainData = unwrapData<TerrainResponse>(terrainPayload);
+        const parcelList = terrainData?.id ? await fetchParcelsByTerrain(terrainData.id) : [];
+        if (canceled) return;
+        setTerrain(terrainData ?? null);
+        setLocalites(localiteList);
+        setParcels(parcelList);
+      } catch {
+        if (!canceled) push({ title: t("load_failed"), kind: "error" });
+      } finally {
+        if (!canceled) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      canceled = true;
+    };
+  }, [id, refreshKey, push, t]);
+
+  const localite = useMemo(() => {
+    if (!terrain) return undefined;
+    return localites.find((item) => item.id === terrain.localite_id);
+  }, [localites, terrain]);
 
   const parcelsResult = useMemo(() => {
-    return terrain
-      ? listParcels({ filters: { terrain_id: terrain.id }, sortKey: "id", sortDir: "asc" })
-      : { items: [], total: 0 };
-  }, [terrain, refreshKey]);
+    return { items: parcels, total: parcels.length };
+  }, [parcels]);
 
-  const handleUpdate = (data: { nom: string; user_id: string; superficie_totale: number; localite_id: string }) => {
+  const totalAreaLabel = useMemo(() => {
+    if (!parcels.length) return "—";
+    const total = parcels.reduce((sum, parcel) => sum + (parcel.superficie ?? 0), 0);
+    return `${total.toLocaleString()} m²`;
+  }, [parcels]);
+
+  const handleUpdate = async (data: { nom: string; localite_id: string }) => {
     if (!terrain) return;
-    const updated = updateTerrain(terrain.id, data);
-    setRefreshKey((k) => k + 1);
-    setModalOpen(false);
-    push({ title: t("edit_terrain"), message: updated?.nom ?? t("save"), kind: "success" });
+      try {
+        const updated = await TerrainsService.updateTerrainApiV1TerrainsTerrainsTerrainIdPut(terrain.id, {
+          nom: data.nom,
+        });
+      setRefreshKey((k) => k + 1);
+      setModalOpen(false);
+      push({ title: t("edit_terrain"), message: updated?.nom ?? t("save"), kind: "success" });
+    } catch {
+      push({ title: t("load_failed"), kind: "error" });
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!terrain) return;
-    const removed = deleteTerrain(terrain.id);
     setConfirmOpen(false);
-    if (!removed) return;
-    push({
-      title: t("delete_toast_title"),
-      message: removed.nom,
-      actionLabel: t("undo"),
-      onAction: () => {
-        restoreTerrain(removed);
-        push({ title: t("delete_toast_undo"), message: removed.nom, kind: "success" });
-      },
-    });
-    router.push("/admin/terrains");
+    try {
+      await TerrainsService.deleteTerrainApiV1TerrainsTerrainsTerrainIdDelete(terrain.id);
+      push({
+        title: t("delete_toast_title"),
+        message: terrain.nom,
+      });
+      router.push("/admin/terrains");
+    } catch {
+      push({ title: t("load_failed"), kind: "error" });
+    }
   };
 
-  const handleAddLocalite = (data: { nom: string; ville: string; pays: string }) => {
+  const handleAddLocalite = async (data: { nom: string; ville: string; pays: string }) => {
     if (!data.nom || !data.ville || !data.pays) return;
-    createLocalite({
-      nom: data.nom,
-      ville: data.ville,
-      pays: data.pays,
-      latitude: 0,
-      longitude: 0,
-      altitude: 0,
-      quartier: "",
-      region: "",
-      code_postal: "",
-      continent: "Afrique",
-      timezone: "Africa/Douala",
-      superficie: 0,
-      population: 0,
-      climate_zone: "tropical",
-    });
-    setRefreshKey((k) => k + 1);
-    setLocaliteOpen(false);
+    try {
+      await LocalitSService.createLocaliteApiV1LocalitesLocalitesPost({
+        nom: data.nom,
+        ville: data.ville,
+        pays: data.pays,
+        continent: Continent.AFRIQUE,
+        climate_zone: ClimateZone.TROPICAL,
+      });
+      setRefreshKey((k) => k + 1);
+      setLocaliteOpen(false);
+    } catch {
+      push({ title: t("load_failed"), kind: "error" });
+    }
   };
 
   if (!id) {
+    return (
+      <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
+        <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117]">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("loading")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!terrain && loading) {
     return (
       <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
         <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117]">
@@ -133,7 +178,7 @@ export default function TerrainDetailsPage() {
             {t("terrain_details_title")} <span className="text-gray-600 dark:text-gray-400">{terrain.id}</span>
           </h1>
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-            {terrain.nom} • {terrain.superficie_totale.toLocaleString()} m²
+            {terrain.nom} • {totalAreaLabel}
           </p>
         </div>
 
@@ -193,8 +238,8 @@ export default function TerrainDetailsPage() {
             <Row label={t("table_id")} value={terrain.id} />
             <Row label={t("terrain_name")} value={terrain.nom} />
             <Row label={t("terrain_owner")} value={terrain.user_id} />
-            <Row label={t("terrain_area")} value={`${terrain.superficie_totale.toLocaleString()} m²`} />
-            <Row label={t("terrain_localite")} value={localite ? formatLocalite(localite) : terrain.localite_id} />
+            <Row label={t("terrain_area")} value={totalAreaLabel} />
+            <Row label={t("terrain_localite")} value={localite ? `${localite.nom} — ${localite.ville}, ${localite.pays}` : terrain.localite_id} />
             <Row label={t("table_climate_zone")} value={localite?.climate_zone ?? "—"} />
           </div>
         </div>
@@ -231,9 +276,9 @@ export default function TerrainDetailsPage() {
                     >
                       <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{p.id}</td>
                       <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nom}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.type_sol}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.culture_actuelle}</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code ?? "—"}</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
                       <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie.toLocaleString()}</td>
                       <td className="px-4 py-3">
                         <button

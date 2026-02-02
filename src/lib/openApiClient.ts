@@ -8,3 +8,8 @@ export function initOpenApi() {
   configured = true;
   OpenAPI.TOKEN = async () => getAccessToken() || "";
 }
+
+// Ensure token resolver is set as early as possible on the client.
+if (typeof window !== "undefined") {
+  initOpenApi();
+}

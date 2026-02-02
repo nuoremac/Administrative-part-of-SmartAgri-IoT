@@ -1,58 +1,120 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useToast } from "@/components/ui/ToastProvider";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useT } from "@/components/i18n/useT";
-import {
-  deleteParcel,
-  listParcels,
-  restoreParcel,
-  type ParcelRow,
-} from "@/lib/mockParcels";
-import { listTerrains } from "@/lib/mockTerrains";
+import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
+import type { TerrainResponse } from "@/lib/models/TerrainResponse";
+import { fetchAllParcels, fetchTerrains } from "@/lib/apiData";
+import { ParcellesService } from "@/lib/services/ParcellesService";
+import { TerrainsService } from "@/lib/services/TerrainsService";
+import { unwrapData } from "@/lib/apiHelpers";
 
 type SortKey = "id" | "nom" | "code" | "type_sol" | "culture_actuelle" | "superficie" | "nombre_capteurs" | "terrain_id";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
-
-function useIsClient() {
-  return useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
-}
 
 export default function ParcelsPage() {
   const router = useRouter();
   const { query, setQuery } = useAdminSearch();
   const { push } = useToast();
   const { t } = useT();
-  const isClient = useIsClient();
 
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("id");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [confirmParcel, setConfirmParcel] = useState<ParcelRow | null>(null);
+  const [confirmParcel, setConfirmParcel] = useState<ParcelleResponse | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
+  const [terrains, setTerrains] = useState<TerrainResponse[]>([]);
+  const [terrainNames, setTerrainNames] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    let canceled = false;
+    const load = async () => {
+      try {
+        const terrainList = await fetchTerrains();
+        const parcelList = await fetchAllParcels(terrainList);
+        if (canceled) return;
+        setTerrains(terrainList);
+        setParcels(parcelList);
+      } catch {
+        if (!canceled) push({ title: t("load_failed"), kind: "error" });
+      }
+    };
+    void load();
+    return () => {
+      canceled = true;
+    };
+  }, [refreshKey, push, t]);
 
-  const terrainMap = useMemo(() => {
-    const rows = listTerrains().items;
-    return new Map(rows.map((tRow) => [tRow.id, tRow.nom]));
-  }, []);
+  const terrainMap = useMemo(() => new Map(terrains.map((tRow) => [tRow.id, tRow.nom])), [terrains]);
+
+  useEffect(() => {
+    let canceled = false;
+    const loadMissingTerrains = async () => {
+      const known = new Map(terrainMap);
+      const missingIds = Array.from(new Set(parcels.map((p) => p.terrain_id))).filter((id) => !known.has(id));
+      if (!missingIds.length) {
+        setTerrainNames(known);
+        return;
+      }
+
+      try {
+        const fetched = await Promise.all(
+          missingIds.map((id) =>
+            TerrainsService.getTerrainApiV1TerrainsTerrainsTerrainIdGet(id)
+              .then((payload) => unwrapData<TerrainResponse>(payload))
+              .catch(() => null)
+          )
+        );
+        if (canceled) return;
+        fetched.forEach((terrain) => {
+          if (terrain) known.set(terrain.id, terrain.nom);
+        });
+        setTerrainNames(known);
+      } catch {
+        if (!canceled) setTerrainNames(known);
+      }
+    };
+    void loadMissingTerrains();
+    return () => {
+      canceled = true;
+    };
+  }, [parcels, terrainMap]);
 
   const listResult = useMemo(() => {
-    return listParcels({
-      search: query,
-      sortKey,
-      sortDir,
-      skip: (page - 1) * PAGE_SIZE,
-      limit: PAGE_SIZE,
+    const search = query.trim().toLowerCase();
+    const filtered = parcels.filter((row) => {
+      if (!search) return true;
+      return (
+        row.id.toLowerCase().includes(search) ||
+        row.nom.toLowerCase().includes(search) ||
+        (row.code ?? "").toLowerCase().includes(search) ||
+        row.terrain_id.toLowerCase().includes(search)
+      );
     });
-  }, [query, sortKey, sortDir, page, refreshKey]);
+
+    const sorted = [...filtered].sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      const getValue = (row: ParcelleResponse) => {
+        if (sortKey === "type_sol") return "";
+        if (sortKey === "culture_actuelle") return "";
+        return (row as Record<string, unknown>)[sortKey] ?? "";
+      };
+      const av = getValue(a);
+      const bv = getValue(b);
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+
+    const total = sorted.length;
+    const start = (page - 1) * PAGE_SIZE;
+    const items = sorted.slice(start, start + PAGE_SIZE);
+    return { items, total };
+  }, [query, sortKey, sortDir, page, parcels]);
 
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), totalPages);
@@ -66,27 +128,25 @@ export default function ParcelsPage() {
     setSortDir((d) => (d === "asc" ? "desc" : "asc"));
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!confirmParcel) return;
-    const removed = deleteParcel(confirmParcel.id);
+    const removed = confirmParcel;
     setConfirmParcel(null);
     if (!removed) return;
 
-    setRefreshKey((k) => k + 1);
-
-    push({
-      title: t("delete_toast_title"),
-      message: `${removed.id}`,
-      actionLabel: t("undo"),
-      onAction: () => {
-        restoreParcel(removed);
-        setRefreshKey((k) => k + 1);
-        push({ title: t("delete_toast_undo"), message: `${removed.id}`, kind: "success" });
-      },
-    });
+    try {
+      await ParcellesService.deleteParcelleApiV1ParcellesParcellesParcelleIdDelete(removed.id);
+      setRefreshKey((k) => k + 1);
+      push({
+        title: t("delete_toast_title"),
+        message: `${removed.id}`,
+      });
+    } catch {
+      push({ title: t("load_failed"), kind: "error" });
+    }
   };
 
-  return isClient ? (
+  return (
     <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
@@ -114,7 +174,6 @@ export default function ParcelsPage() {
           <table className="min-w-full md:min-w-[980px] w-full text-left text-sm">
             <thead className="sticky top-0 bg-white dark:bg-[#0d1117]">
               <tr className="border-b border-gray-400 dark:border-gray-800">
-                <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
                 <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
                 <ThSortable label={t("table_code")} active={sortKey === "code"} dir={sortDir} onClick={() => toggleSort("code")} />
                 <ThSortable label={t("table_soil_type")} active={sortKey === "type_sol"} dir={sortDir} onClick={() => toggleSort("type_sol")} />
@@ -139,15 +198,14 @@ export default function ParcelsPage() {
                     key={p.id}
                     className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                   >
-                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{p.id}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nom}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.type_sol}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.culture_actuelle}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code ?? "—"}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie} m²</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nombre_capteurs}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nombre_capteurs ?? "—"}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                      {terrainMap.get(p.terrain_id) ?? p.terrain_id}
+                      {terrainNames.get(p.terrain_id) ?? p.terrain_id}
                     </td>
 
                     <td className="px-4 py-3">
@@ -203,8 +261,6 @@ export default function ParcelsPage() {
         onCancel={() => setConfirmParcel(null)}
       />
     </div>
-  ) : (
-    <ParcelsSkeleton />
   );
 }
 

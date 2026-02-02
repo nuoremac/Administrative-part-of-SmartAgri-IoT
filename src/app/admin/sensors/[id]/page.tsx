@@ -4,9 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useT } from "@/components/i18n/useT";
 import { useLang } from "@/components/i18n/LangProvider";
-import { getLatestMeasurement, listSensorData } from "@/lib/mockSensorData";
-import { getParcel, listParcels } from "@/lib/mockParcels";
-import { deleteSensor, getSensor, updateSensor } from "@/lib/mockSensors";
+import type { Capteur } from "@/lib/models/Capteur";
+import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
+import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
+import { fetchAllParcels } from "@/lib/apiData";
+import { CapteursService } from "@/lib/services/CapteursService";
+import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
+import { ParcellesService } from "@/lib/services/ParcellesService";
+import { unwrapData, unwrapList } from "@/lib/apiHelpers";
+import { getSensorParcelMap, setSensorParcelLink } from "@/lib/sensorParcelStore";
 import {
   LineChart,
   Line,
@@ -16,18 +22,6 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-
-function StatusBadge({ level, t }: { level: "ok" | "warning" | "offline"; t: (k: string) => string }) {
-  const cls =
-    level === "ok"
-      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
-      : level === "warning"
-      ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200"
-      : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200";
-
-  const label = level === "ok" ? t("status_ok") : level === "warning" ? t("status_warning") : t("status_offline");
-  return <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${cls}`}>{label}</span>;
-}
 
 export default function SensorDetailsPage() {
   const router = useRouter();
@@ -41,34 +35,159 @@ export default function SensorDetailsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState({ nom: "", dev_eui: "", code: "" });
-  const [assignedParcelId, setAssignedParcelId] = useState("");
-
-  const sensor = useMemo(() => (id ? getSensor(id) : undefined), [id, refreshKey]);
-  const parcels = useMemo(() => listParcels({ limit: 200 }).items, []);
-
-  const parcel = useMemo(() => {
-    if (!sensor) return null;
-    return getParcel(sensor.parcelle_id);
-  }, [sensor]);
+  const [sensor, setSensor] = useState<Capteur | null>(null);
+  const [parcel, setParcel] = useState<ParcelleResponse | null>(null);
+  const [measurements, setMeasurements] = useState<SensorMeasurementsResponse[]>([]);
+  const [latest, setLatest] = useState<SensorMeasurementsResponse | null>(null);
+  const [showCharts, setShowCharts] = useState(false);
+  const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
+  const [assignedParcelCode, setAssignedParcelCode] = useState("");
 
   const metricsData = useMemo(() => {
-    if (!sensor) return [];
-    return listSensorData({ capteur_id: sensor.id, parcelle_id: sensor.parcelle_id, range }).map((m) => ({
-      t: range === "24h" ? new Date(m.timestamp).toLocaleTimeString() : new Date(m.timestamp).toLocaleDateString(),
-      ph: m.ph,
-      azote: m.azote,
-      phosphore: m.phosphore,
-      potassium: m.potassium,
-      humidity: m.humidity,
-      temperature: m.temperature,
-    }));
-  }, [sensor, range]);
+    if (!measurements.length) return [];
+    return measurements
+      .slice()
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .map((m) => ({
+        t: range === "24h" ? new Date(m.timestamp).toLocaleTimeString() : new Date(m.timestamp).toLocaleDateString(),
+        ph: m.ph ?? undefined,
+        azote: m.azote ?? undefined,
+        phosphore: m.phosphore ?? undefined,
+        potassium: m.potassium ?? undefined,
+        humidity: m.humidity ?? undefined,
+        temperature: m.temperature ?? undefined,
+      }));
+  }, [measurements, range]);
+
+  useEffect(() => {
+    let canceled = false;
+    const load = async () => {
+      if (!id) return;
+      try {
+        const payload = await CapteursService.readCapteurApiV1CapteursCapteurIdGet(id);
+        const data = unwrapData<Capteur>(payload);
+        if (canceled) return;
+        setSensor(data ?? null);
+      } catch {
+        if (!canceled) setSensor(null);
+      }
+    };
+    void load();
+    return () => {
+      canceled = true;
+    };
+  }, [id, refreshKey]);
+
+  useEffect(() => {
+    let canceled = false;
+    const loadParcels = async () => {
+      try {
+        const list = await fetchAllParcels();
+        if (canceled) return;
+        setParcels(list);
+      } catch {
+        if (!canceled) setParcels([]);
+      }
+    };
+    void loadParcels();
+    return () => {
+      canceled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!sensor) return;
     setDraft({ nom: sensor.nom, dev_eui: sensor.dev_eui, code: sensor.code });
-    setAssignedParcelId(sensor.parcelle_id);
+    const map = getSensorParcelMap();
+    setAssignedParcelCode(map[sensor.code] ?? "");
   }, [sensor]);
+
+  useEffect(() => {
+    let canceled = false;
+    const loadLatest = async () => {
+      if (!sensor) return;
+      try {
+        const payload = await DonnEsDeCapteursService.getLatestMeasurementApiV1SensorDataSensorDataLatestCapteurCapteurIdGet(sensor.id);
+        const data = unwrapData<SensorMeasurementsResponse>(payload);
+        if (canceled) return;
+        setLatest(data ?? null);
+        if (data?.parcelle_id) {
+          const parcelPayload = await ParcellesService.getParcelleApiV1ParcellesParcellesParcelleIdGet(data.parcelle_id);
+          setParcel(unwrapData<ParcelleResponse>(parcelPayload));
+        } else {
+          setParcel(null);
+        }
+      } catch {
+        if (!canceled) setLatest(null);
+      }
+    };
+    void loadLatest();
+    return () => {
+      canceled = true;
+    };
+  }, [sensor]);
+
+  useEffect(() => {
+    let canceled = false;
+    const loadMeasurements = async () => {
+      if (!sensor) return;
+      try {
+        const now = new Date();
+        const endDate = now.toISOString();
+        const days = range === "24h" ? 1 : range === "7d" ? 7 : 30;
+        const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+        const payload = await DonnEsDeCapteursService.getMeasurementsByCapteurApiV1SensorDataSensorDataCapteurCapteurIdGet(
+          sensor.id,
+          undefined,
+          200,
+          startDate,
+          endDate
+        );
+        const list = unwrapList<SensorMeasurementsResponse>(payload);
+        if (canceled) return;
+        setMeasurements(list);
+      } catch {
+        if (!canceled) setMeasurements([]);
+      }
+    };
+    void loadMeasurements();
+    return () => {
+      canceled = true;
+    };
+  }, [range, sensor]);
+
+  useEffect(() => {
+    const id = setTimeout(() => setShowCharts(true), 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
+    let canceled = false;
+    const hydrateParcelFromMeasurements = async () => {
+      if (parcel || !measurements.length) return;
+      const latestFromList = measurements
+        .slice()
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+      if (!latestFromList?.parcelle_id) return;
+      try {
+        const payload = await ParcellesService.getParcelleApiV1ParcellesParcellesParcelleIdGet(latestFromList.parcelle_id);
+        if (canceled) return;
+        setParcel(unwrapData<ParcelleResponse>(payload));
+      } catch {
+        // ignore
+      }
+    };
+    void hydrateParcelFromMeasurements();
+    return () => {
+      canceled = true;
+    };
+  }, [measurements, parcel]);
+
+  useEffect(() => {
+    if (!assignedParcelCode) return;
+    const linked = parcels.find((p) => (p.code ?? "") === assignedParcelCode);
+    if (linked) setParcel(linked);
+  }, [assignedParcelCode, parcels]);
 
   if (!id) {
     return (
@@ -99,10 +218,9 @@ export default function SensorDetailsPage() {
     );
   }
 
-  const latest = getLatestMeasurement({ capteur_id: sensor.id, parcelle_id: sensor.parcelle_id });
   const level: "ok" | "warning" | "offline" =
-    !latest ? "offline" : latest.humidity < 35 ? "warning" : "ok";
-  const lastMeasure = latest ? `${latest.humidity}%` : "—";
+    !latest ? "offline" : latest.humidity != null && latest.humidity < 35 ? "warning" : "ok";
+  const lastMeasure = latest?.humidity != null ? `${latest.humidity}%` : "—";
 
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
@@ -117,7 +235,7 @@ export default function SensorDetailsPage() {
           </button>
 
           <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            {t("sensor_details_title")} <span className="text-gray-600 dark:text-gray-400">{sensor.id}</span>
+            {t("sensor_details_title")}
           </h1>
 
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
@@ -165,8 +283,9 @@ export default function SensorDetailsPage() {
             type="button"
             onClick={() => {
               if (!window.confirm(t("delete_confirm_body"))) return;
-              deleteSensor(sensor.id);
-              router.push("/admin/sensors");
+              void CapteursService.deleteCapteurApiV1CapteursCapteurIdDelete(sensor.id).then(() => {
+                router.push("/admin/sensors");
+              });
             }}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
             aria-label={t("delete")}
@@ -196,7 +315,6 @@ export default function SensorDetailsPage() {
         <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117]">
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("sensor_latest_measure")}</p>
           <div className="mt-3 space-y-2 text-xs text-gray-700 dark:text-gray-300">
-            <Row label={t("table_id")} value={sensor.id} />
             <Row label={t("table_name")} value={sensor.nom} />
             <Row label="DevEUI" value={sensor.dev_eui} />
             <Row label={t("sensor_status_label")} value={statusLabel(level, t)} />
@@ -237,13 +355,13 @@ export default function SensorDetailsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    updateSensor(sensor.id, {
+                    void CapteursService.updateCapteurApiV1CapteursCapteurIdPut(sensor.id, {
                       nom: draft.nom.trim(),
                       dev_eui: draft.dev_eui.trim(),
-                      code: draft.code.trim(),
+                    }).then(() => {
+                      setRefreshKey((prev) => prev + 1);
+                      setIsEditing(false);
                     });
-                    setRefreshKey((prev) => prev + 1);
-                    setIsEditing(false);
                   }}
                   className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
                 >
@@ -269,14 +387,18 @@ export default function SensorDetailsPage() {
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("sensor_history")}</p>
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("dashboard_moisture_label")}</p>
 
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} />
-            <MetricChart title={t("metric_azote")} unit="mg/kg" dataKey="azote" data={metricsData} />
-            <MetricChart title={t("metric_phosphore")} unit="mg/kg" dataKey="phosphore" data={metricsData} />
-            <MetricChart title={t("metric_potassium")} unit="mg/kg" dataKey="potassium" data={metricsData} />
-            <MetricChart title={t("dashboard_humidity")} unit="%" dataKey="humidity" data={metricsData} />
-            <MetricChart title={t("dashboard_temperature")} unit="°C" dataKey="temperature" data={metricsData} />
-          </div>
+          {showCharts ? (
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} />
+              <MetricChart title={t("metric_azote")} unit="mg/kg" dataKey="azote" data={metricsData} />
+              <MetricChart title={t("metric_phosphore")} unit="mg/kg" dataKey="phosphore" data={metricsData} />
+              <MetricChart title={t("metric_potassium")} unit="mg/kg" dataKey="potassium" data={metricsData} />
+              <MetricChart title={t("dashboard_humidity")} unit="%" dataKey="humidity" data={metricsData} />
+              <MetricChart title={t("dashboard_temperature")} unit="°C" dataKey="temperature" data={metricsData} />
+            </div>
+          ) : (
+            <div className="mt-3 h-[220px] rounded-sm bg-gray-100 dark:bg-[#161b22]" />
+          )}
         </div>
 
         <div className="rounded-sm border border-gray-300 bg-white dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-3">
@@ -285,23 +407,26 @@ export default function SensorDetailsPage() {
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("sensor_parcels_subtitle")}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <select
-                value={assignedParcelId}
-                onChange={(e) => setAssignedParcelId(e.target.value)}
+                value={assignedParcelCode}
+                onChange={(e) => setAssignedParcelCode(e.target.value)}
                 className="h-9 min-w-[220px] rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
                            dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
               >
+                <option value="">{t("table_parcels")}</option>
                 {parcels.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nom} ({p.id})
+                  <option key={p.id} value={p.code ?? ""} disabled={!p.code}>
+                    {p.nom} {p.code ? `(${p.code})` : ""}
                   </option>
                 ))}
               </select>
               <button
                 type="button"
                 onClick={() => {
-                  if (!assignedParcelId) return;
-                  updateSensor(sensor.id, { parcelle_id: assignedParcelId });
-                  setRefreshKey((prev) => prev + 1);
+                  if (!sensor || !assignedParcelCode) return;
+                  void CapteursService.assignCapteurApiV1CapteursAssignPost(assignedParcelCode, sensor.code).then(() => {
+                    setSensorParcelLink(sensor.code, assignedParcelCode);
+                    setRefreshKey((prev) => prev + 1);
+                  });
                 }}
                 className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
               >
@@ -314,7 +439,6 @@ export default function SensorDetailsPage() {
             <table className="min-w-[760px] w-full text-left text-sm">
               <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
                 <tr className="border-b border-gray-200 dark:border-gray-800">
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_id")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_name")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_code")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_area")}</th>
@@ -335,9 +459,8 @@ export default function SensorDetailsPage() {
                       key={p.id}
                       className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                     >
-                      <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{p.id}</td>
                       <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nom}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code}</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code ?? "—"}</td>
                       <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie.toLocaleString()}</td>
                       <td className="px-4 py-3">
                         <button
@@ -402,7 +525,7 @@ function MetricChart({
   unit,
 }: {
   title: string;
-  data: Array<Record<string, string | number>>;
+  data: Array<Record<string, string | number | undefined>>;
   dataKey: string;
   unit: string;
 }) {

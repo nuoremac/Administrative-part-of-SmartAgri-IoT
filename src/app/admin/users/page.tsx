@@ -10,6 +10,7 @@ import type { UserRow } from "@/lib/mockUsers";
 import type { UserResponse } from "@/lib/models/UserResponse";
 import { OpenAPI } from "@/lib/core/OpenAPI";
 import { getAccessToken } from "@/lib/authSession";
+import { AuthenticationService } from "@/lib/services/AuthenticationService";
 import { UsersService } from "@/lib/services/UsersService";
 
 type SortKey = "nom";
@@ -56,7 +57,18 @@ export default function AdminUsersPage() {
     if (Array.isArray(payload)) return payload;
     if (payload && typeof payload === "object" && "data" in payload) {
       const data = (payload as { data: unknown }).data;
-      return Array.isArray(data) ? data : [];
+      if (Array.isArray(data)) return data;
+      if (data && typeof data === "object") {
+        const candidates = [
+          (data as { items?: unknown }).items,
+          (data as { users?: unknown }).users,
+          (data as { results?: unknown }).results,
+        ];
+        for (const value of candidates) {
+          if (Array.isArray(value)) return value as UserResponse[];
+        }
+      }
+      return [];
     }
     return [];
   };
@@ -88,10 +100,10 @@ export default function AdminUsersPage() {
     const load = async () => {
       setLoading(true);
       try {
-        let list = resolveUserList(await UsersService.getAllUsersApiV1UsersGet(undefined, 500));
+        let list = resolveUserList(await UsersService.getAllUsersApiV1UsersGet(undefined, 100));
         if (!list.length) {
           const token = getAccessToken();
-          const fallbackUrl = `${OpenAPI.BASE}/api/v1/users`;
+          const fallbackUrl = `${OpenAPI.BASE}/api/v1/users?limit=100`;
           const res = await fetch(fallbackUrl, {
             headers: {
               Accept: "application/json",
@@ -106,9 +118,26 @@ export default function AdminUsersPage() {
         if (canceled) return;
         setUsers(list.map((u) => toUserRow(resolveUser(u) ?? (u as UserResponse))));
       } catch {
-        if (!canceled) {
-          pushRef.current({ title: tRef.current("load_failed"), kind: "error" });
+        if (canceled) return;
+        try {
+          const token = getAccessToken();
+          const fallbackUrl = `${OpenAPI.BASE}/api/v1/users?limit=100`;
+          const res = await fetch(fallbackUrl, {
+            headers: {
+              Accept: "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            const list = resolveUserList(json);
+            setUsers(list.map((u) => toUserRow(resolveUser(u) ?? (u as UserResponse))));
+            return;
+          }
+        } catch {
+          // ignore fallback errors
         }
+        pushRef.current({ title: tRef.current("load_failed"), kind: "error" });
       } finally {
         if (!canceled) setLoading(false);
       }
@@ -161,7 +190,9 @@ export default function AdminUsersPage() {
   const safePage = Math.min(Math.max(page, 1), totalPages);
 
   const openCreate = () => {
-    push({ title: t("feature_unavailable"), kind: "error" });
+    setModalMode("create");
+    setEditing(null);
+    setModalOpen(true);
   };
 
   const openEdit = (u: UserRow) => {
@@ -170,13 +201,40 @@ export default function AdminUsersPage() {
     setModalOpen(true);
   };
 
-  const onSubmitModal = async (data: Omit<UserRow, "id">) => {
+  const onSubmitModal = async (data: Omit<UserRow, "id"> & { password?: string }) => {
     if (!data.nom?.trim() || !data.prenom?.trim() || !data.email?.trim()) {
       push({
         title: t("invalidCredentials"),
         message: t("email"),
         kind: "error",
       });
+      return;
+    }
+
+    if (modalMode === "create") {
+      try {
+        if (!data.password?.trim()) {
+          push({ title: t("invalidCredentials"), message: t("password"), kind: "error" });
+          return;
+        }
+        const created = await AuthenticationService.registerUserApiV1AuthRegisterUserPost({
+          nom: data.nom.trim(),
+          prenom: data.prenom.trim(),
+          email: data.email.trim(),
+          telephone: data.telephone?.trim() || null,
+          password: data.password.trim(),
+        });
+        const resolved = resolveUser(created) ?? (created as UserResponse);
+        setUsers((prev) => [toUserRow(resolved), ...prev]);
+        setModalOpen(false);
+        push({
+          title: t("add_user"),
+          message: `${data.prenom} ${data.nom}`,
+          kind: "success",
+        });
+      } catch {
+        push({ title: t("profile_update_failed"), kind: "error" });
+      }
       return;
     }
 
@@ -216,8 +274,6 @@ export default function AdminUsersPage() {
           type="button"
           onClick={openCreate}
           className="h-9 rounded-sm bg-green-600 px-3 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
-          disabled
-          title={t("feature_unavailable")}
         >
           + {t("add_user")}
         </button>

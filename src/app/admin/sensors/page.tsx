@@ -1,36 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useT } from "@/components/i18n/useT";
-import {
-  createSensor,
-  listSensors,
-} from "@/lib/mockSensors";
-import { getLatestMeasurement } from "@/lib/mockSensorData";
-import { getParcel, listParcels } from "@/lib/mockParcels";
+import type { Capteur } from "@/lib/models/Capteur";
+import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
+import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
+import { fetchAllParcels, fetchSensors } from "@/lib/apiData";
+import { CapteursService } from "@/lib/services/CapteursService";
+import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
+import { unwrapData } from "@/lib/apiHelpers";
+import { getSensorParcelMap } from "@/lib/sensorParcelStore";
 
 type SortKey = "id" | "nom" | "dev_eui" | "parcelle_id";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
-
-function statusLabel(level: "ok" | "warning" | "offline", t: (k: string) => string) {
-  if (level === "ok") return t("status_ok");
-  if (level === "warning") return t("status_warning");
-  return t("status_offline");
-}
-
-function StatusBadge({ level, t }: { level: "ok" | "warning" | "offline"; t: (k: string) => string }) {
-  const cls =
-    level === "ok"
-      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
-      : level === "warning"
-      ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200"
-      : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200";
-
-  return <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${cls}`}>{statusLabel(level, t)}</span>;
-}
 
 export default function SensorsPage() {
   const router = useRouter();
@@ -42,19 +27,75 @@ export default function SensorsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [refreshKey, setRefreshKey] = useState(0);
   const [isAdding, setIsAdding] = useState(false);
-  const parcels = useMemo(() => listParcels({ limit: 200 }).items, []);
-  const defaultParcelId = parcels[0]?.id || "";
-  const [draft, setDraft] = useState({ nom: "", dev_eui: "", code: "", parcelle_id: defaultParcelId });
+  const [draft, setDraft] = useState({ nom: "", dev_eui: "", code: "" });
+  const [sensors, setSensors] = useState<Capteur[]>([]);
+  const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
+  const [latestBySensor, setLatestBySensor] = useState<Map<string, SensorMeasurementsResponse | null>>(new Map());
+
+  useEffect(() => {
+    let canceled = false;
+    const load = async () => {
+      try {
+        const [sensorList, parcelList] = await Promise.all([fetchSensors(), fetchAllParcels()]);
+        const latestList = await Promise.all(
+          sensorList.map((sensor) =>
+            DonnEsDeCapteursService.getLatestMeasurementApiV1SensorDataSensorDataLatestCapteurCapteurIdGet(sensor.id)
+              .then((payload) => unwrapData<SensorMeasurementsResponse>(payload))
+              .catch(() => null)
+          )
+        );
+        if (canceled) return;
+        setSensors(sensorList);
+        setParcels(parcelList);
+        setLatestBySensor(new Map(sensorList.map((sensor, i) => [sensor.id, latestList[i] ?? null])));
+      } catch {
+        if (!canceled) {
+          setSensors([]);
+          setParcels([]);
+          setLatestBySensor(new Map());
+        }
+      }
+    };
+    void load();
+    return () => {
+      canceled = true;
+    };
+  }, [refreshKey]);
+
+  const parcelMap = useMemo(() => new Map(parcels.map((p) => [p.id, p])), [parcels]);
+  const parcelByCode = useMemo(() => new Map(parcels.map((p) => [p.code ?? "", p])), [parcels]);
+  const sensorParcelMap = useMemo(() => getSensorParcelMap(), [refreshKey, parcels.length]);
 
   const listResult = useMemo(() => {
-    return listSensors({
-      search: query,
-      sortKey,
-      sortDir,
-      skip: (page - 1) * PAGE_SIZE,
-      limit: PAGE_SIZE,
+    const search = query.trim().toLowerCase();
+    const filtered = sensors.filter((row) => {
+      if (!search) return true;
+      return (
+        row.id.toLowerCase().includes(search) ||
+        row.nom.toLowerCase().includes(search) ||
+        row.dev_eui.toLowerCase().includes(search)
+      );
     });
-  }, [query, sortKey, sortDir, page, refreshKey]);
+
+    const sorted = [...filtered].sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      const getValue = (row: Capteur) => {
+        if (sortKey === "parcelle_id") {
+          return latestBySensor.get(row.id)?.parcelle_id ?? "";
+        }
+        return (row as Record<string, unknown>)[sortKey] ?? "";
+      };
+      const av = getValue(a);
+      const bv = getValue(b);
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+
+    const total = sorted.length;
+    const start = (page - 1) * PAGE_SIZE;
+    const items = sorted.slice(start, start + PAGE_SIZE);
+    return { items, total };
+  }, [query, sortKey, sortDir, page, sensors, latestBySensor]);
 
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), totalPages);
@@ -85,11 +126,10 @@ export default function SensorsPage() {
             onClick={() => {
               setIsAdding((prev) => !prev);
               if (!isAdding) {
-                setDraft((prev) => ({
+                setDraft(() => ({
                   nom: "",
                   dev_eui: "",
                   code: "",
-                  parcelle_id: prev.parcelle_id || defaultParcelId,
                 }));
               }
             }}
@@ -140,37 +180,22 @@ export default function SensorsPage() {
                            dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
               />
             </div>
-            <div>
-              <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{t("table_parcels")}</label>
-              <select
-                value={draft.parcelle_id}
-                onChange={(e) => setDraft((prev) => ({ ...prev, parcelle_id: e.target.value }))}
-                className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
-                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
-              >
-                {parcels.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nom} ({p.id})
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
           <div className="mt-3 flex items-center gap-2">
             <button
               type="button"
               onClick={() => {
                 const now = new Date().toISOString();
-                createSensor({
+                void CapteursService.createCapteurApiV1CapteursPost({
                   nom: draft.nom.trim() || "Capteur",
                   dev_eui: draft.dev_eui.trim() || `AUTO-${Date.now()}`,
                   code: draft.code.trim() || `CPT-${Date.now()}`,
-                  parcelle_id: draft.parcelle_id || defaultParcelId,
                   date_installation: now,
                   date_activation: now,
+                }).then(() => {
+                  setRefreshKey((k) => k + 1);
+                  setIsAdding(false);
                 });
-                setRefreshKey((k) => k + 1);
-                setIsAdding(false);
               }}
               className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
             >
@@ -193,7 +218,6 @@ export default function SensorsPage() {
           <table className="min-w-full md:min-w-[980px] w-full text-left text-sm">
             <thead className="sticky top-0 bg-white dark:bg-[#0d1117]">
               <tr className="border-b border-gray-400 dark:border-gray-800">
-                <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
                 <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
                 <ThSortable label="DevEUI" active={sortKey === "dev_eui"} dir={sortDir} onClick={() => toggleSort("dev_eui")} />
                 <ThSortable label={t("table_parcels")} active={sortKey === "parcelle_id"} dir={sortDir} onClick={() => toggleSort("parcelle_id")} />
@@ -210,19 +234,18 @@ export default function SensorsPage() {
                 </tr>
               ) : (
                 listResult.items.map((s) => {
-                  const latest = getLatestMeasurement({ capteur_id: s.id, parcelle_id: s.parcelle_id });
-                  const level: "ok" | "warning" | "offline" =
-                    !latest ? "offline" : latest.humidity < 35 ? "warning" : "ok";
-                  const parcel = getParcel(s.parcelle_id);
+                  const latest = latestBySensor.get(s.id) ?? null;
+                  const linkedParcelCode = sensorParcelMap[s.code] ?? "";
+                  const linkedParcel = linkedParcelCode ? parcelByCode.get(linkedParcelCode) ?? null : null;
+                  const parcel = linkedParcel ?? (latest?.parcelle_id ? parcelMap.get(latest.parcelle_id) : null);
                   return (
                   <tr
                     key={s.id}
                     className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                   >
-                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{s.id}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.nom}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.dev_eui}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{parcel?.nom ?? s.parcelle_id}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{parcel?.nom ?? latest?.parcelle_id ?? "—"}</td>
 
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">

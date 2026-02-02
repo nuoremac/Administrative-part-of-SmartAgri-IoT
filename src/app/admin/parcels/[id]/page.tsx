@@ -1,14 +1,21 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getParcel, updateParcel, type ParcelRow } from "@/lib/mockParcels";
-import { getTerrain } from "@/lib/mockTerrains";
 import EditParcelModal from "@/components/admin/parcels/EditParcelModal";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useT } from "@/components/i18n/useT";
 import { useLang } from "@/components/i18n/LangProvider";
-import { listParcelMeasurements } from "@/lib/mockSensorData";
+import type { Capteur } from "@/lib/models/Capteur";
+import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
+import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
+import type { TerrainResponse } from "@/lib/models/TerrainResponse";
+import { fetchAllParcels, fetchTerrains } from "@/lib/apiData";
+import { CapteursService } from "@/lib/services/CapteursService";
+import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
+import { ParcellesService } from "@/lib/services/ParcellesService";
+import { TerrainsService } from "@/lib/services/TerrainsService";
+import { unwrapData, unwrapList } from "@/lib/apiHelpers";
 import {
   LineChart,
   Line,
@@ -27,15 +34,6 @@ type Sensor = {
   status: "ok" | "warning" | "offline";
 };
 
-const MOCK_NOW_MS = Date.parse("2026-01-02T12:00:00.000Z");
-
-function useIsClient() {
-  return useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
-}
 
 export default function ParcelDetailsPage() {
   const params = useParams();
@@ -49,62 +47,182 @@ function ParcelDetailsInner({ id }: { id: string }) {
   const { push } = useToast();
   const { t } = useT();
   const { lang } = useLang();
-  const isClient = useIsClient();
+  const pushRef = useRef(push);
+  const tRef = useRef(t);
 
   const [editOpen, setEditOpen] = useState(false);
-  const [parcelView, setParcelView] = useState<ParcelRow | null>(null);
+  const [parcel, setParcel] = useState<ParcelleResponse | null>(null);
+  const [terrain, setTerrain] = useState<TerrainResponse | null>(null);
+  const [measurements, setMeasurements] = useState<SensorMeasurementsResponse[]>([]);
+  const [sensors, setSensors] = useState<Capteur[]>([]);
+  const [loading, setLoading] = useState(false);
   const [range, setRange] = useState<"24h" | "7d">("24h");
+  const [showCharts, setShowCharts] = useState(false);
 
-  const sensors: Sensor[] = useMemo(
-    () => [
-      {
-        id: "S-101",
-        name: "Capteur 1",
-        type: "Soil Moisture",
-        lastSeen: new Date(MOCK_NOW_MS - 12 * 60000).toISOString(),
-        status: "ok",
-      },
-      {
-        id: "S-102",
-        name: "Capteur 2",
-        type: "Temperature",
-        lastSeen: new Date(MOCK_NOW_MS - 60 * 60000).toISOString(),
-        status: "warning",
-      },
-      {
-        id: "S-103",
-        name: "Capteur 3",
-        type: "pH",
-        lastSeen: new Date(MOCK_NOW_MS - 9 * 3600000).toISOString(),
-        status: "offline",
-      },
-    ],
-    []
-  );
+  useEffect(() => {
+    pushRef.current = push;
+  }, [push]);
 
-  const parcelFromStore = isClient && id ? getParcel(id) : undefined;
-  const displayed: ParcelRow | undefined = parcelView ?? parcelFromStore;
-  const terrain = displayed?.terrain_id ? getTerrain(displayed.terrain_id) : undefined;
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
+  useEffect(() => {
+    let canceled = false;
+    const load = async () => {
+      if (!id) return;
+      setLoading(true);
+      try {
+        let parcelData: ParcelleResponse | null = null;
+        try {
+          const parcelPayload = await ParcellesService.getParcelleApiV1ParcellesParcellesParcelleIdGet(id);
+          parcelData = unwrapData<ParcelleResponse>(parcelPayload);
+        } catch {
+          const token = localStorage.getItem("smartagro:access_token");
+          const res = await fetch(`https://iot-soil-backend.onrender.com/api/v1/parcelles/parcelles/${id}`, {
+            headers: {
+              Accept: "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            parcelData = unwrapData<ParcelleResponse>(json);
+          }
+        }
+        if (!parcelData) {
+          // Fallback: try global parcel list (some backends don't expose detail by ID).
+          try {
+            const list = await fetchAllParcels();
+            parcelData = list.find((p) => p.id === id) ?? null;
+          } catch {
+            parcelData = null;
+          }
+        }
+        if (!parcelData) {
+          if (!canceled) setParcel(null);
+          return;
+        }
+        let terrainData: TerrainResponse | null = null;
+        try {
+          const terrainPayload = await TerrainsService.getTerrainApiV1TerrainsTerrainsTerrainIdGet(parcelData.terrain_id);
+          terrainData = unwrapData<TerrainResponse>(terrainPayload);
+        } catch {
+          try {
+            const list = await fetchTerrains();
+            terrainData = list.find((t) => t.id === parcelData?.terrain_id) ?? null;
+          } catch {
+            terrainData = null;
+          }
+        }
+        if (canceled) return;
+        setParcel(parcelData);
+        setTerrain(terrainData ?? null);
+      } catch {
+        if (!canceled) pushRef.current({ title: tRef.current("load_failed"), kind: "error" });
+      } finally {
+        if (!canceled) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      canceled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    let canceled = false;
+    const loadMeasurements = async () => {
+      if (!parcel) return;
+      try {
+        const now = new Date();
+        const endDate = now.toISOString();
+        const startDate = new Date(now.getTime() - (range === "24h" ? 24 : 7 * 24) * 60 * 60 * 1000).toISOString();
+        const payload = await DonnEsDeCapteursService.getMeasurementsByParcelleApiV1SensorDataSensorDataParcelleParcelleIdGet(
+          parcel.id,
+          undefined,
+          200,
+          startDate,
+          endDate
+        );
+        const list = unwrapList<SensorMeasurementsResponse>(payload);
+        if (canceled) return;
+        setMeasurements(list);
+        const uniqueCapteurs = Array.from(new Set(list.map((m) => m.capteur_id).filter(Boolean)));
+        const capteurList = await Promise.all(
+          uniqueCapteurs.map((capteurId) =>
+            CapteursService.readCapteurApiV1CapteursCapteurIdGet(capteurId).catch(() => null)
+          )
+        );
+        if (canceled) return;
+        setSensors(capteurList.filter((item): item is Capteur => !!item));
+      } catch {
+        if (!canceled) setMeasurements([]);
+      }
+    };
+    void loadMeasurements();
+    return () => {
+      canceled = true;
+    };
+  }, [parcel, range]);
+
+  useEffect(() => {
+    const id = setTimeout(() => setShowCharts(true), 0);
+    return () => clearTimeout(id);
+  }, []);
 
   const metricsData = useMemo(() => {
-    if (!displayed) return [];
-    const series = listParcelMeasurements({ parcelle_id: displayed.id, range });
-    return series.map((m) => ({
-      t: range === "24h" ? new Date(m.timestamp).toLocaleTimeString() : new Date(m.timestamp).toLocaleDateString(),
-      ph: m.ph,
-      azote: m.azote,
-      phosphore: m.phosphore,
-      potassium: m.potassium,
-      humidity: m.humidity,
-      temperature: m.temperature,
-    }));
-  }, [displayed, range]);
+    if (!measurements.length) return [];
+    return measurements
+      .slice()
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .map((m) => ({
+        t: range === "24h" ? new Date(m.timestamp).toLocaleTimeString() : new Date(m.timestamp).toLocaleDateString(),
+        ph: m.ph ?? undefined,
+        azote: m.azote ?? undefined,
+        phosphore: m.phosphore ?? undefined,
+        potassium: m.potassium ?? undefined,
+        humidity: m.humidity ?? undefined,
+        temperature: m.temperature ?? undefined,
+      }));
+  }, [measurements, range]);
 
-  if (!isClient || !id) {
+  const sensorsList: Sensor[] = useMemo(() => {
+    if (!sensors.length) return [];
+    return sensors.map((sensor) => {
+      const last = measurements
+        .filter((m) => m.capteur_id === sensor.id)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+      const lastSeen = last?.timestamp ?? new Date(0).toISOString();
+      const diffMs = Date.now() - new Date(lastSeen).getTime();
+      const status: Sensor["status"] =
+        !last ? "offline" : diffMs < 24 * 60 * 60 * 1000 ? "ok" : diffMs < 7 * 24 * 60 * 60 * 1000 ? "warning" : "offline";
+      return {
+        id: sensor.id,
+        name: sensor.nom,
+        type: "Soil Moisture",
+        lastSeen,
+        status,
+      };
+    });
+  }, [measurements, sensors]);
+
+  const latest = useMemo(() => {
+    if (!measurements.length) return null;
+    return measurements
+      .slice()
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+  }, [measurements]);
+
+  const level: "ok" | "warning" | "offline" =
+    !latest ? "offline" : latest.humidity != null && latest.humidity < 35 ? "warning" : "ok";
+  const lastMeasure = latest?.humidity != null ? `${latest.humidity}%` : "—";
+
+  if (!id) {
     return <ParcelDetailsSkeleton />;
   }
 
-  if (!displayed) {
+  if (!parcel && !loading) {
     return (
       <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
         <button
@@ -123,6 +241,10 @@ function ParcelDetailsInner({ id }: { id: string }) {
     );
   }
 
+  if (!parcel) {
+    return <ParcelDetailsSkeleton />;
+  }
+
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -135,13 +257,13 @@ function ParcelDetailsInner({ id }: { id: string }) {
             ← {t("back_to_list")}
           </button>
 
-          <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            {t("parcel_details_title")} <span className="text-gray-600 dark:text-gray-400">{displayed.id}</span>
-          </h1>
+          <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100">{t("parcel_details_title")}</h1>
 
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-            {t("parcel_area_label")} <span className="font-semibold">{displayed.superficie.toLocaleString()} m²</span> •{" "}
-            {t("parcel_sensors_label")} <span className="font-semibold">{displayed.nombre_capteurs}</span>
+            <span className="font-semibold">{parcel.nom}</span> {" "}
+            <span className="text-gray-500 dark:text-gray-400">
+              ({latest ? formatLastUpdate(latest.timestamp) : "—"})
+            </span>
           </p>
         </div>
 
@@ -156,51 +278,64 @@ function ParcelDetailsInner({ id }: { id: string }) {
             <option value="24h">{t("dashboard_range_24h")}</option>
             <option value="7d">{t("dashboard_range_7d")}</option>
           </select>
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-white hover:bg-amber-600"
+            aria-label={t("edit")}
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            <span className="sr-only">{t("edit")}</span>
+          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-
-        <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-3">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("moisture_history")}</p>
-          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("parcel_chart_subtitle")}</p>
-
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} />
-            <MetricChart title={t("metric_azote")} unit="mg/kg" dataKey="azote" data={metricsData} />
-            <MetricChart title={t("metric_phosphore")} unit="mg/kg" dataKey="phosphore" data={metricsData} />
-            <MetricChart title={t("metric_potassium")} unit="mg/kg" dataKey="potassium" data={metricsData} />
-            <MetricChart title={t("dashboard_humidity")} unit="%" dataKey="humidity" data={metricsData} />
-            <MetricChart title={t("dashboard_temperature")} unit="°C" dataKey="temperature" data={metricsData} />
-          </div>
-        </div>
-
         <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117]">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("parcel_details_title")}</p>
-
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("latest_measure")}</p>
           <div className="mt-3 space-y-2 text-xs text-gray-700 dark:text-gray-300">
-            <Row label={t("table_id")} value={displayed.id} />
-            <Row label={t("table_name")} value={displayed.nom} />
-            <Row label={t("table_code")} value={displayed.code} />
-            <Row label={t("table_soil_type")} value={displayed.type_sol} />
-            <Row label={t("table_current_crop")} value={displayed.culture_actuelle} />
-            <Row label={t("parcel_area_label")} value={`${displayed.superficie.toLocaleString()} m²`} />
-            <Row label={t("parcel_sensors_label")} value={`${displayed.nombre_capteurs}`} />
-            <Row label={t("parcel_last_update")} value={formatLastUpdate(displayed.updated_at)} />
+            <Row label={t("table_name")} value={parcel.nom} />
+            <Row label={t("table_code")} value={parcel.code ?? "—"} />
+            <Row label={t("table_status")} value={statusLabel(level, t)} />
+            <Row label={t("table_last_measure")} value={lastMeasure} />
+            <Row label={t("parcel_area_label")} value={`${parcel.superficie.toLocaleString()} m²`} />
+            <Row label={t("parcel_sensors_label")} value={`${parcel.nombre_capteurs ?? "—"}`} />
             {terrain ? (
               <Row label={t("table_terrain")} value={terrain.nom} />
             ) : (
-              <Row label={t("table_terrain")} value={displayed.terrain_id} />
+              <Row label={t("table_terrain")} value={parcel.terrain_id} />
             )}
           </div>
+        </div>
 
-          <button
-            type="button"
-            onClick={() => setEditOpen(true)}
-            className="mt-4 h-9 w-full rounded-sm bg-green-600 px-3 text-xs font-semibold text-white hover:bg-green-700"
-          >
-            {t("edit_parcel")}
-          </button>
+        <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-2">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("moisture_history")}</p>
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("parcel_chart_subtitle")}</p>
+
+          {showCharts ? (
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} />
+              <MetricChart title={t("metric_azote")} unit="mg/kg" dataKey="azote" data={metricsData} />
+              <MetricChart title={t("metric_phosphore")} unit="mg/kg" dataKey="phosphore" data={metricsData} />
+              <MetricChart title={t("metric_potassium")} unit="mg/kg" dataKey="potassium" data={metricsData} />
+              <MetricChart title={t("dashboard_humidity")} unit="%" dataKey="humidity" data={metricsData} />
+              <MetricChart title={t("dashboard_temperature")} unit="°C" dataKey="temperature" data={metricsData} />
+            </div>
+          ) : (
+            <div className="mt-3 h-[220px] rounded-sm bg-gray-100 dark:bg-[#161b22]" />
+          )}
         </div>
 
         <div className="rounded-sm border border-gray-300 bg-white dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-3">
@@ -221,7 +356,7 @@ function ParcelDetailsInner({ id }: { id: string }) {
                 </tr>
               </thead>
               <tbody>
-                {sensors.map((s) => (
+                {sensorsList.map((s) => (
                   <tr
                     key={s.id}
                     className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
@@ -242,30 +377,30 @@ function ParcelDetailsInner({ id }: { id: string }) {
       </div>
 
       <EditParcelModal
-        key={displayed.id}
+        key={parcel.id}
         open={editOpen}
-        parcel={displayed}
+        parcel={parcel}
         onClose={() => setEditOpen(false)}
-        onSave={(patch) => {
-          const updated = updateParcel(displayed.id, patch);
-          setEditOpen(false);
-
-          if (!updated) {
+        onSave={async (patch) => {
+          try {
+            const updated = await ParcellesService.updateParcelleApiV1ParcellesParcellesParcelleIdPut(parcel.id, {
+              nom: patch.nom,
+              superficie: patch.superficie,
+            });
+            setParcel(unwrapData<ParcelleResponse>(updated));
+            setEditOpen(false);
+            push({
+              title: t("edit_parcel"),
+              message: `${parcel.id}`,
+              kind: "success",
+            });
+          } catch {
             push({
               title: t("invalidCredentials"),
               message: t("edit_parcel"),
               kind: "error",
             });
-            return;
           }
-
-          setParcelView(updated);
-
-          push({
-            title: t("edit_parcel"),
-            message: `${updated.id}`,
-            kind: "success",
-          });
         }}
       />
     </div>
@@ -301,7 +436,7 @@ function MetricChart({
   unit,
 }: {
   title: string;
-  data: Array<Record<string, string | number>>;
+  data: Array<Record<string, string | number | undefined>>;
   dataKey: string;
   unit: string;
 }) {
@@ -328,6 +463,12 @@ function MetricChart({
   );
 }
 
+function statusLabel(level: "ok" | "warning" | "offline", t: (k: string) => string) {
+  if (level === "ok") return t("status_ok");
+  if (level === "warning") return t("status_warning");
+  return t("status_offline");
+}
+
 function formatLastUpdate(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
@@ -337,7 +478,7 @@ function formatLastUpdate(iso: string) {
 function formatAgo(iso: string, lang: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  const diffMs = MOCK_NOW_MS - d.getTime();
+  const diffMs = Date.now() - d.getTime();
   const mins = Math.floor(diffMs / 60000);
   if (mins < 60) return lang === "fr" ? `il y a ${mins} min` : `${mins}m ago`;
   const hours = Math.floor(mins / 60);
