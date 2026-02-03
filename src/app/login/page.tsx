@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthenticationService } from "@/lib/services/AuthenticationService";
+import { OpenAPI } from "@/lib/core/OpenAPI";
 import { saveAuthSession } from "@/lib/authSession";
 import { useLang, type Lang } from "@/components/i18n/LangProvider";
 import { useT } from "@/components/i18n/useT";
@@ -40,9 +41,36 @@ export default function LoginPage() {
         response && typeof response === "object" && "data" in response
           ? (response as { data: typeof response }).data
           : response;
+      const role = tokens?.user?.role?.toString().toLowerCase();
+      if (role !== "admin") {
+        setError(t("admin_only_message"));
+        return;
+      }
       saveAuthSession(tokens);
       router.push("/admin/dashboard");
     } catch {
+      try {
+        const res = await fetch(`${OpenAPI.BASE}/api/v1/auth/login/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const tokens =
+            json && typeof json === "object" && "data" in json ? (json as { data: typeof json }).data : json;
+          const role = tokens?.user?.role?.toString().toLowerCase();
+          if (role !== "admin") {
+            setError(t("admin_only_message"));
+            return;
+          }
+          saveAuthSession(tokens);
+          router.push("/admin/dashboard");
+          return;
+        }
+      } catch {
+        // ignore fallback errors
+      }
       setError(t("invalidCredentials"));
     } finally {
       setLoading(false);

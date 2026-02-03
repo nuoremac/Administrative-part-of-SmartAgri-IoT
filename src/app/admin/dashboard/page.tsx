@@ -12,6 +12,7 @@ import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurements
 import type { TerrainResponse } from "@/lib/models/TerrainResponse";
 import type { UserResponse } from "@/lib/models/UserResponse";
 import { fetchAllMeasurements, fetchAllParcels, fetchLocalites, fetchSensors, fetchTerrains, fetchUsers } from "@/lib/apiData";
+import { AdministrationService } from "@/lib/services/AdministrationService";
 import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
 import { RecommandationsService } from "@/lib/services/RecommandationsService";
 import { unwrapList } from "@/lib/apiHelpers";
@@ -24,6 +25,7 @@ type Alert = {
   title: string;
   subtitle: string;
   time: string;
+  parcelCode?: string;
 };
 
 type Recommendation = {
@@ -31,6 +33,7 @@ type Recommendation = {
   title: string;
   parcel: string;
   time: string;
+  parcelCode?: string;
 };
 
 export default function AdminDashboardPage() {
@@ -48,11 +51,25 @@ export default function AdminDashboardPage() {
   const [selectedParcelId, setSelectedParcelId] = useState<string>("");
   const [parcelMeasurements, setParcelMeasurements] = useState<SensorMeasurementsResponse[]>([]);
   const [showCharts, setShowCharts] = useState(false);
+  const [adminStats, setAdminStats] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     let canceled = false;
     const load = async () => {
       try {
+        let dashboardStats: Record<string, unknown> | null = null;
+        try {
+          const payload = await AdministrationService.getAdminDashboardApiV1AdminDashboardGet();
+          if (payload && typeof payload === "object") {
+            if ("data" in payload) {
+              dashboardStats = (payload as { data: Record<string, unknown> }).data ?? null;
+            } else {
+              dashboardStats = payload as Record<string, unknown>;
+            }
+          }
+        } catch {
+          dashboardStats = null;
+        }
         const [userList, terrainList, sensorList, localiteList] = await Promise.all([
           fetchUsers(),
           fetchTerrains(),
@@ -70,6 +87,7 @@ export default function AdminDashboardPage() {
         setParcels(parcelList);
         setMeasurements(measurementList);
         setRecommendations(unwrapList<RecommendationResponse>(recommendationPayload));
+        setAdminStats(dashboardStats);
       } catch {
         if (!canceled) {
           setUsers([]);
@@ -79,6 +97,7 @@ export default function AdminDashboardPage() {
           setParcels([]);
           setMeasurements([]);
           setRecommendations([]);
+          setAdminStats(null);
         }
       } finally {
       }
@@ -94,11 +113,40 @@ export default function AdminDashboardPage() {
     return () => clearTimeout(id);
   }, []);
 
+  const getAdminCount = (keys: string[]) => {
+    if (!adminStats) return null;
+    for (const key of keys) {
+      const value = adminStats[key];
+      if (typeof value === "number") return value;
+    }
+    return null;
+  };
+
   const kpis = [
-    { label: t("dashboard_kpi_users"), value: users.length, meta: t("dashboard_kpi_users_meta"), tone: "emerald" as const },
-    { label: t("dashboard_kpi_terrains"), value: terrains.length, meta: t("dashboard_kpi_terrains_meta"), tone: "teal" as const },
-    { label: t("dashboard_kpi_parcels"), value: parcels.length, meta: t("dashboard_kpi_parcels_meta"), tone: "amber" as const },
-    { label: t("dashboard_kpi_sensors"), value: sensors.length, meta: t("dashboard_kpi_sensors_meta"), tone: "blue" as const },
+    {
+      label: t("dashboard_kpi_users"),
+      value: getAdminCount(["users", "utilisateurs", "total_users"]) ?? users.length,
+      meta: t("dashboard_kpi_users_meta"),
+      tone: "emerald" as const,
+    },
+    {
+      label: t("dashboard_kpi_terrains"),
+      value: getAdminCount(["terrains", "fields", "total_terrains"]) ?? terrains.length,
+      meta: t("dashboard_kpi_terrains_meta"),
+      tone: "teal" as const,
+    },
+    {
+      label: t("dashboard_kpi_parcels"),
+      value: getAdminCount(["parcelles", "parcels", "total_parcelles"]) ?? parcels.length,
+      meta: t("dashboard_kpi_parcels_meta"),
+      tone: "amber" as const,
+    },
+    {
+      label: t("dashboard_kpi_sensors"),
+      value: getAdminCount(["capteurs", "sensors", "total_capteurs"]) ?? sensors.length,
+      meta: t("dashboard_kpi_sensors_meta"),
+      tone: "blue" as const,
+    },
   ];
 
   const parcelMap = useMemo(() => new Map(parcels.map((p) => [p.id, p])), [parcels]);
@@ -146,10 +194,11 @@ export default function AdminDashboardPage() {
     return sorted.slice(0, 3).map((m) => {
       const sensor = sensorMap.get(m.capteur_id);
       const parcel = parcelMap.get(m.parcelle_id);
+      const parcelLabel = parcel ? `${parcel.code ?? "—"} — ${parcel.nom}` : m.parcelle_id;
       return {
         id: m.id,
         devEui: sensor?.dev_eui ?? "—",
-        parcel: parcel?.nom ?? m.parcelle_id,
+        parcel: parcelLabel,
         humidity: m.humidity != null ? `${m.humidity}%` : "—",
         temperature: m.temperature != null ? `${m.temperature}°C` : "—",
         time: formatAgo(m.timestamp),
@@ -181,6 +230,7 @@ export default function AdminDashboardPage() {
     for (const m of sorted) {
       if (alertsList.length >= 3) break;
       const parcel = parcelMap.get(m.parcelle_id);
+      const parcelLabel = parcel ? `${parcel.code ?? "—"} — ${parcel.nom}` : m.parcelle_id;
       const title =
         m.humidity != null && m.humidity < 35
           ? t("dashboard_alert_humidity_low")
@@ -194,8 +244,9 @@ export default function AdminDashboardPage() {
         id: m.id,
         level: m.humidity != null && m.humidity < 35 ? "warning" : "info",
         title,
-        subtitle: parcel ? parcel.nom : m.parcelle_id,
+        subtitle: parcelLabel,
         time: formatAgo(m.timestamp),
+        parcelCode: parcel?.code ?? undefined,
       });
     }
     return alertsList;
@@ -237,11 +288,13 @@ export default function AdminDashboardPage() {
   const recs: Recommendation[] = useMemo(() => {
     return recommendations.slice(0, 4).map((r) => {
       const parcel = parcelMap.get(String(r.parcelle_id));
+      const parcelLabel = parcel ? `${parcel.code ?? "—"} — ${parcel.nom}` : String(r.parcelle_id);
       return {
         id: String(r.id),
         title: r.titre,
-        parcel: parcel?.nom ?? String(r.parcelle_id),
+        parcel: parcelLabel,
         time: formatAgo(r.date_creation),
+        parcelCode: parcel?.code ?? undefined,
       };
     });
   }, [recommendations, parcelMap]);
@@ -249,14 +302,14 @@ export default function AdminDashboardPage() {
   const filteredAlerts = useMemo(() => {
     if (!search) return alerts;
     return alerts.filter(
-      (a) => a.title.toLowerCase().includes(search) || a.subtitle.toLowerCase().includes(search)
+      (a) => a.title.toLowerCase().includes(search) || (a.parcelCode ?? "").toLowerCase().includes(search)
     );
   }, [alerts, search]);
 
   const filteredRecommendations = useMemo(() => {
     if (!search) return recs;
     return recs.filter(
-      (r) => r.title.toLowerCase().includes(search) || r.parcel.toLowerCase().includes(search)
+      (r) => r.title.toLowerCase().includes(search) || (r.parcelCode ?? "").toLowerCase().includes(search)
     );
   }, [recs, search]);
 
@@ -277,7 +330,9 @@ export default function AdminDashboardPage() {
       .map((m) => ({
         id: `m-${m.id}`,
         title: t("dashboard_timeline_sensor"),
-        meta: parcelMap.get(m.parcelle_id)?.nom ?? m.parcelle_id,
+        meta: parcelMap.get(m.parcelle_id)
+          ? `${parcelMap.get(m.parcelle_id)?.code ?? "—"} — ${parcelMap.get(m.parcelle_id)?.nom}`
+          : m.parcelle_id,
         time: formatAgo(m.timestamp),
         ts: new Date(m.timestamp).getTime(),
       }));
@@ -389,7 +444,7 @@ export default function AdminDashboardPage() {
                   ) : (
                     parcels.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.nom}
+                        {`${p.code ?? "—"} — ${p.nom}`}
                       </option>
                     ))
                   )}
@@ -486,20 +541,7 @@ export default function AdminDashboardPage() {
             </div>
           </Card>
 
-          <Card title={t("dashboard_system_status")}>
-            <div className="grid grid-cols-2 gap-2">
-              <MiniStat
-                label={t("dashboard_gateways_online")}
-                value={`${sensorStatus.online}/${sensorStatus.total || 0}`}
-              />
-              <MiniStat
-                label={t("dashboard_last_ingest")}
-                value={sensorStatus.lastIngest ? formatAgo(sensorStatus.lastIngest) : "—"}
-              />
-              <MiniStat label={t("dashboard_low_battery")} value={`${alerts.length}`} />
-              <MiniStat label={t("dashboard_offline")} value={`${sensorStatus.offline}`} />
-            </div>
-          </Card>
+          
         </div>
       </section>
     </div>

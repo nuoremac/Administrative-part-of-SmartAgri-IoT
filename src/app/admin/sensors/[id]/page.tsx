@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useT } from "@/components/i18n/useT";
+import { useToast } from "@/components/ui/ToastProvider";
 import { useLang } from "@/components/i18n/LangProvider";
 import type { Capteur } from "@/lib/models/Capteur";
 import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
@@ -12,7 +13,7 @@ import { CapteursService } from "@/lib/services/CapteursService";
 import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
 import { ParcellesService } from "@/lib/services/ParcellesService";
 import { unwrapData, unwrapList } from "@/lib/apiHelpers";
-import { getSensorParcelMap, setSensorParcelLink } from "@/lib/sensorParcelStore";
+import { clearSensorParcelLink, getSensorParcelMap, setSensorParcelLink } from "@/lib/sensorParcelStore";
 import {
   LineChart,
   Line,
@@ -27,6 +28,7 @@ export default function SensorDetailsPage() {
   const router = useRouter();
   const { t } = useT();
   const { lang } = useLang();
+  const { push } = useToast();
   const params = useParams();
   const raw = params?.id;
   const id: string = Array.isArray(raw) ? raw[0] : (raw ?? "");
@@ -42,6 +44,7 @@ export default function SensorDetailsPage() {
   const [showCharts, setShowCharts] = useState(false);
   const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
   const [assignedParcelCode, setAssignedParcelCode] = useState("");
+  const canAssign = Boolean(sensor?.code && assignedParcelCode);
 
   const metricsData = useMemo(() => {
     if (!measurements.length) return [];
@@ -189,6 +192,11 @@ export default function SensorDetailsPage() {
     if (linked) setParcel(linked);
   }, [assignedParcelCode, parcels]);
 
+  const assignedParcel = useMemo(() => {
+    if (!assignedParcelCode) return null;
+    return parcels.find((p) => (p.code ?? "") === assignedParcelCode) ?? null;
+  }, [assignedParcelCode, parcels]);
+
   if (!id) {
     return (
       <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
@@ -313,12 +321,11 @@ export default function SensorDetailsPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117]">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("sensor_latest_measure")}</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("parcel_information")}</p>
           <div className="mt-3 space-y-2 text-xs text-gray-700 dark:text-gray-300">
             <Row label={t("table_name")} value={sensor.nom} />
             <Row label="DevEUI" value={sensor.dev_eui} />
             <Row label={t("sensor_status_label")} value={statusLabel(level, t)} />
-            <Row label={t("table_last_measure")} value={lastMeasure} />
           </div>
           {isEditing ? (
             <div className="mt-4 space-y-3 text-xs text-gray-700 dark:text-gray-300">
@@ -389,7 +396,7 @@ export default function SensorDetailsPage() {
 
           {showCharts ? (
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} />
+              <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} yDomain={[0, 14]} yTicks={[0, 7, 14]} />
               <MetricChart title={t("metric_azote")} unit="mg/kg" dataKey="azote" data={metricsData} />
               <MetricChart title={t("metric_phosphore")} unit="mg/kg" dataKey="phosphore" data={metricsData} />
               <MetricChart title={t("metric_potassium")} unit="mg/kg" dataKey="potassium" data={metricsData} />
@@ -422,15 +429,25 @@ export default function SensorDetailsPage() {
               <button
                 type="button"
                 onClick={() => {
-                  if (!sensor || !assignedParcelCode) return;
-                  void CapteursService.assignCapteurApiV1CapteursAssignPost(assignedParcelCode, sensor.code).then(() => {
-                    setSensorParcelLink(sensor.code, assignedParcelCode);
-                    setRefreshKey((prev) => prev + 1);
-                  });
+                  if (!sensor?.code || !assignedParcelCode) {
+                    push({ title: t("load_failed"), kind: "error" });
+                    return;
+                  }
+                  void CapteursService.assignCapteurApiV1CapteursAssignPost(assignedParcelCode, sensor.code)
+                    .then(() => {
+                      setSensorParcelLink(sensor.code, assignedParcelCode);
+                      setRefreshKey((prev) => prev + 1);
+                    })
+                    .catch(() => {
+                      push({ title: t("load_failed"), kind: "error" });
+                    });
                 }}
-                className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
+                className={`rounded-sm px-3 py-2 text-xs font-semibold text-white ${
+                  canAssign ? "bg-green-600 hover:bg-green-700" : "cursor-not-allowed bg-gray-300"
+                }`}
+                disabled={!canAssign}
               >
-                {t("save")}
+                {t("assign_sensor")}
               </button>
             </div>
           </div>
@@ -442,19 +459,19 @@ export default function SensorDetailsPage() {
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_name")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_code")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_area")}</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("deassign")}</th>
                 </tr>
               </thead>
 
               <tbody>
-                {!parcel ? (
+                {!assignedParcel ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
                       {t("empty_parcels")}
                     </td>
                   </tr>
                 ) : (
-                  [parcel].map((p) => (
+                  [assignedParcel].map((p) => (
                     <tr
                       key={p.id}
                       className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
@@ -465,9 +482,23 @@ export default function SensorDetailsPage() {
                       <td className="px-4 py-3">
                         <button
                           type="button"
-                          onClick={() => router.push(`/admin/parcels/${p.id}`)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700"
-                          aria-label={t("consult")}
+                          onClick={() => {
+                            if (!sensor?.code || !p.code) {
+                              push({ title: t("load_failed"), kind: "error" });
+                              return;
+                            }
+                            void CapteursService.desassignCapteurApiV1CapteursDesassignPost(p.code, sensor.code)
+                              .then(() => {
+                                clearSensorParcelLink(sensor.code);
+                                setAssignedParcelCode("");
+                                setRefreshKey((prev) => prev + 1);
+                              })
+                              .catch(() => {
+                                push({ title: t("load_failed"), kind: "error" });
+                              });
+                          }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-sm bg-red-600 text-white hover:bg-red-700"
+                          aria-label={t("deassign")}
                         >
                           <svg
                             aria-hidden="true"
@@ -479,10 +510,12 @@ export default function SensorDetailsPage() {
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           >
-                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-                            <circle cx="12" cy="12" r="3" />
+                            <path d="M17 7l-10 10" />
+                            <path d="M7 7l10 10" />
+                            <path d="M16 3h5v5" />
+                            <path d="M8 21H3v-5" />
                           </svg>
-                          <span className="sr-only">{t("consult")}</span>
+                          <span className="sr-only">{t("deassign")}</span>
                         </button>
                       </td>
                     </tr>
@@ -523,11 +556,15 @@ function MetricChart({
   data,
   dataKey,
   unit,
+  yDomain,
+  yTicks,
 }: {
   title: string;
   data: Array<Record<string, string | number | undefined>>;
   dataKey: string;
   unit: string;
+  yDomain?: [number, number];
+  yTicks?: number[];
 }) {
   const tooltipFormatter = (value: number | string | undefined) =>
     `${value ?? "—"}${unit ? ` ${unit}` : ""}`;
@@ -542,7 +579,7 @@ function MetricChart({
           <LineChart data={data} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="t" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-            <YAxis width={28} />
+            <YAxis width={28} domain={yDomain} ticks={yTicks} />
             <Tooltip formatter={tooltipFormatter} />
             <Line type="monotone" dataKey={dataKey} strokeWidth={2} dot={false} />
           </LineChart>

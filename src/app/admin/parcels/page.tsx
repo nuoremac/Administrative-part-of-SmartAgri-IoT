@@ -13,7 +13,7 @@ import { ParcellesService } from "@/lib/services/ParcellesService";
 import { TerrainsService } from "@/lib/services/TerrainsService";
 import { unwrapData } from "@/lib/apiHelpers";
 
-type SortKey = "id" | "nom" | "code" | "type_sol" | "culture_actuelle" | "superficie" | "nombre_capteurs" | "terrain_id";
+type SortKey = "id" | "nom" | "code" | "type_sol" | "culture_actuelle" | "superficie" | "terrain_id";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
 
@@ -49,6 +49,7 @@ export default function ParcelsPage() {
       canceled = true;
     };
   }, [refreshKey, push, t]);
+
 
   const terrainMap = useMemo(() => new Map(terrains.map((tRow) => [tRow.id, tRow.nom])), [terrains]);
 
@@ -179,7 +180,6 @@ export default function ParcelsPage() {
                 <ThSortable label={t("table_soil_type")} active={sortKey === "type_sol"} dir={sortDir} onClick={() => toggleSort("type_sol")} />
                 <ThSortable label={t("table_current_crop")} active={sortKey === "culture_actuelle"} dir={sortDir} onClick={() => toggleSort("culture_actuelle")} />
                 <ThSortable label={t("table_area")} active={sortKey === "superficie"} dir={sortDir} onClick={() => toggleSort("superficie")} />
-                <ThSortable label={t("table_sensors")} active={sortKey === "nombre_capteurs"} dir={sortDir} onClick={() => toggleSort("nombre_capteurs")} />
                 <ThSortable label={t("table_terrain")} active={sortKey === "terrain_id"} dir={sortDir} onClick={() => toggleSort("terrain_id")} />
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_view")}</th>
               </tr>
@@ -203,7 +203,6 @@ export default function ParcelsPage() {
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie} m²</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nombre_capteurs ?? "—"}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                       {terrainNames.get(p.terrain_id) ?? p.terrain_id}
                     </td>

@@ -10,12 +10,13 @@ import type { Capteur } from "@/lib/models/Capteur";
 import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
 import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
 import type { TerrainResponse } from "@/lib/models/TerrainResponse";
-import { fetchAllParcels, fetchTerrains } from "@/lib/apiData";
+import { fetchAllParcels, fetchSensors, fetchTerrains } from "@/lib/apiData";
 import { CapteursService } from "@/lib/services/CapteursService";
 import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
 import { ParcellesService } from "@/lib/services/ParcellesService";
 import { TerrainsService } from "@/lib/services/TerrainsService";
 import { unwrapData, unwrapList } from "@/lib/apiHelpers";
+import { clearSensorParcelLink, getSensorParcelMap, setSensorParcelLink } from "@/lib/sensorParcelStore";
 import {
   LineChart,
   Line,
@@ -28,6 +29,8 @@ import {
 
 type Sensor = {
   id: string;
+  code: string;
+  devEui: string;
   name: string;
   type: "Soil Moisture" | "Temperature" | "pH";
   lastSeen: string; // ISO
@@ -55,6 +58,9 @@ function ParcelDetailsInner({ id }: { id: string }) {
   const [terrain, setTerrain] = useState<TerrainResponse | null>(null);
   const [measurements, setMeasurements] = useState<SensorMeasurementsResponse[]>([]);
   const [sensors, setSensors] = useState<Capteur[]>([]);
+  const [assignedSensors, setAssignedSensors] = useState<Capteur[]>([]);
+  const [allSensors, setAllSensors] = useState<Capteur[]>([]);
+  const [assignSensorCode, setAssignSensorCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [range, setRange] = useState<"24h" | "7d">("24h");
   const [showCharts, setShowCharts] = useState(false);
@@ -145,7 +151,9 @@ function ParcelDetailsInner({ id }: { id: string }) {
           startDate,
           endDate
         );
-        const list = unwrapList<SensorMeasurementsResponse>(payload);
+        const list = unwrapList<SensorMeasurementsResponse>(payload).filter(
+          (item) => item.parcelle_id === parcel.id
+        );
         if (canceled) return;
         setMeasurements(list);
         const uniqueCapteurs = Array.from(new Set(list.map((m) => m.capteur_id).filter(Boolean)));
@@ -155,7 +163,11 @@ function ParcelDetailsInner({ id }: { id: string }) {
           )
         );
         if (canceled) return;
-        setSensors(capteurList.filter((item): item is Capteur => !!item));
+        setSensors(
+          capteurList
+            .map((item) => (item ? unwrapData<Capteur>(item) : null))
+            .filter((item): item is Capteur => !!item)
+        );
       } catch {
         if (!canceled) setMeasurements([]);
       }
@@ -165,6 +177,39 @@ function ParcelDetailsInner({ id }: { id: string }) {
       canceled = true;
     };
   }, [parcel, range]);
+
+  const loadAssignedSensors = async () => {
+    if (!parcel?.code) {
+      setAssignedSensors([]);
+      return;
+    }
+    try {
+      const map = getSensorParcelMap();
+      const allSensors = await fetchSensors();
+      setAllSensors(allSensors);
+      const linked = allSensors.filter((sensor) => map[sensor.code] === parcel.code);
+      setAssignedSensors(linked);
+    } catch {
+      setAssignedSensors([]);
+      setAllSensors([]);
+    }
+  };
+
+  useEffect(() => {
+    let canceled = false;
+    void loadAssignedSensors().catch(() => {
+      if (!canceled) setAssignedSensors([]);
+    });
+    return () => {
+      canceled = true;
+    };
+  }, [parcel?.code]);
+
+  const availableSensors = useMemo(() => {
+    if (!allSensors.length) return [];
+    const assignedCodes = new Set(assignedSensors.map((sensor) => sensor.code));
+    return allSensors.filter((sensor) => !assignedCodes.has(sensor.code));
+  }, [allSensors, assignedSensors]);
 
   useEffect(() => {
     const id = setTimeout(() => setShowCharts(true), 0);
@@ -188,8 +233,9 @@ function ParcelDetailsInner({ id }: { id: string }) {
   }, [measurements, range]);
 
   const sensorsList: Sensor[] = useMemo(() => {
-    if (!sensors.length) return [];
-    return sensors.map((sensor) => {
+    const source = assignedSensors.length ? assignedSensors : sensors;
+    if (!source.length) return [];
+    return source.map((sensor) => {
       const last = measurements
         .filter((m) => m.capteur_id === sensor.id)
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
@@ -199,13 +245,17 @@ function ParcelDetailsInner({ id }: { id: string }) {
         !last ? "offline" : diffMs < 24 * 60 * 60 * 1000 ? "ok" : diffMs < 7 * 24 * 60 * 60 * 1000 ? "warning" : "offline";
       return {
         id: sensor.id,
+        code: sensor.code ?? "",
+        devEui: sensor.dev_eui ?? "",
         name: sensor.nom,
         type: "Soil Moisture",
         lastSeen,
         status,
       };
     });
-  }, [measurements, sensors]);
+  }, [assignedSensors, measurements, sensors]);
+
+  const canDeassign = assignedSensors.length > 0;
 
   const latest = useMemo(() => {
     if (!measurements.length) return null;
@@ -304,14 +354,13 @@ function ParcelDetailsInner({ id }: { id: string }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117]">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("latest_measure")}</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("parcel_information")}</p>
           <div className="mt-3 space-y-2 text-xs text-gray-700 dark:text-gray-300">
             <Row label={t("table_name")} value={parcel.nom} />
             <Row label={t("table_code")} value={parcel.code ?? "—"} />
             <Row label={t("table_status")} value={statusLabel(level, t)} />
-            <Row label={t("table_last_measure")} value={lastMeasure} />
             <Row label={t("parcel_area_label")} value={`${parcel.superficie.toLocaleString()} m²`} />
-            <Row label={t("parcel_sensors_label")} value={`${parcel.nombre_capteurs ?? "—"}`} />
+            <Row label={t("parcel_sensors_label")} value={`${assignedSensors.length || sensors.length || 0}`} />
             {terrain ? (
               <Row label={t("table_terrain")} value={terrain.nom} />
             ) : (
@@ -326,7 +375,7 @@ function ParcelDetailsInner({ id }: { id: string }) {
 
           {showCharts ? (
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} />
+              <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} yDomain={[0, 14]} yTicks={[0, 7, 14]} />
               <MetricChart title={t("metric_azote")} unit="mg/kg" dataKey="azote" data={metricsData} />
               <MetricChart title={t("metric_phosphore")} unit="mg/kg" dataKey="phosphore" data={metricsData} />
               <MetricChart title={t("metric_potassium")} unit="mg/kg" dataKey="potassium" data={metricsData} />
@@ -342,31 +391,107 @@ function ParcelDetailsInner({ id }: { id: string }) {
           <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("attached_sensors")}</p>
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("parcel_sensors_subtitle")}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select
+                value={assignSensorCode}
+                onChange={(e) => setAssignSensorCode(e.target.value)}
+                className="h-9 min-w-[220px] rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+              >
+                <option value="">{t("assign_sensor_select")}</option>
+                {availableSensors.map((sensor) => (
+                  <option key={sensor.id} value={sensor.code}>
+                    {(sensor.code || sensor.dev_eui) ? `${sensor.code || sensor.dev_eui} — ${sensor.nom}` : sensor.nom}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!parcel?.code || !assignSensorCode) return;
+                  const parcelCode = parcel.code;
+                  void CapteursService.assignCapteurApiV1CapteursAssignPost(parcelCode, assignSensorCode)
+                    .then(() => {
+                      setSensorParcelLink(assignSensorCode, parcelCode);
+                      setAssignSensorCode("");
+                      void loadAssignedSensors();
+                    })
+                    .catch(() => {
+                      pushRef.current({ title: tRef.current("load_failed"), kind: "error" });
+                    });
+                }}
+                className={`rounded-sm px-3 py-2 text-xs font-semibold text-white ${
+                  assignSensorCode ? "bg-green-600 hover:bg-green-700" : "cursor-not-allowed bg-gray-300"
+                }`}
+                disabled={!assignSensorCode}
+              >
+                {t("assign_sensor")}
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="min-w-[780px] w-full text-left text-sm">
               <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
                 <tr className="border-b border-gray-200 dark:border-gray-800">
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_id")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_name")}</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_type")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_code")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_last_activity")}</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_status")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("deassign")}</th>
                 </tr>
               </thead>
               <tbody>
-                {sensorsList.map((s) => (
+                {sensorsList.map((s, idx) => (
                   <tr
-                    key={s.id}
+                    key={s.id ?? s.code ?? `sensor-${idx}`}
                     className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                   >
-                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{s.id}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.name}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.type}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.code || s.devEui || "—"}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{formatAgo(s.lastSeen, lang)}</td>
                     <td className="px-4 py-3">
                       <SensorBadge status={s.status} t={t} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!parcel?.code || !s.code) return;
+                          void CapteursService.desassignCapteurApiV1CapteursDesassignPost(parcel.code, s.code)
+                            .then(() => {
+                              clearSensorParcelLink(s.code);
+                              void loadAssignedSensors();
+                            })
+                            .catch(() => {
+                              pushRef.current({ title: tRef.current("load_failed"), kind: "error" });
+                            });
+                        }}
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-sm ${
+                          canDeassign
+                            ? "bg-red-600 text-white hover:bg-red-700"
+                            : "cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-600"
+                        }`}
+                        disabled={!canDeassign}
+                        aria-label={t("deassign")}
+                      >
+                        <svg
+                          aria-hidden="true"
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M17 7l-10 10" />
+                          <path d="M7 7l10 10" />
+                          <path d="M16 3h5v5" />
+                          <path d="M8 21H3v-5" />
+                        </svg>
+                        <span className="sr-only">{t("deassign")}</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -434,11 +559,15 @@ function MetricChart({
   data,
   dataKey,
   unit,
+  yDomain,
+  yTicks,
 }: {
   title: string;
   data: Array<Record<string, string | number | undefined>>;
   dataKey: string;
   unit: string;
+  yDomain?: [number, number];
+  yTicks?: number[];
 }) {
   const tooltipFormatter = (value: number | string | undefined) =>
     `${value ?? "—"}${unit ? ` ${unit}` : ""}`;
@@ -453,7 +582,7 @@ function MetricChart({
           <LineChart data={data} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="t" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-            <YAxis width={28} />
+            <YAxis width={28} domain={yDomain} ticks={yTicks} />
             <Tooltip formatter={tooltipFormatter} />
             <Line type="monotone" dataKey={dataKey} strokeWidth={2} dot={false} />
           </LineChart>

@@ -22,3 +22,11 @@ export function setSensorParcelLink(sensorCode: string, parcelCode: string) {
   current[sensorCode] = parcelCode;
   localStorage.setItem(STORE_KEY, JSON.stringify(current));
 }
+
+export function clearSensorParcelLink(sensorCode: string) {
+  if (!hasWindow()) return;
+  const current = getSensorParcelMap();
+  if (!(sensorCode in current)) return;
+  delete current[sensorCode];
+  localStorage.setItem(STORE_KEY, JSON.stringify(current));
+}

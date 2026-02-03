@@ -6,12 +6,14 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useT } from "@/components/i18n/useT";
 import { useLang } from "@/components/i18n/LangProvider";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import type { UserRow } from "@/lib/mockUsers";
 import type { UserResponse } from "@/lib/models/UserResponse";
 import { OpenAPI } from "@/lib/core/OpenAPI";
-import { getAccessToken } from "@/lib/authSession";
+import { getAccessToken, getCurrentUser } from "@/lib/authSession";
 import { AuthenticationService } from "@/lib/services/AuthenticationService";
 import { UsersService } from "@/lib/services/UsersService";
+import { fetchAllParcels, fetchTerrains } from "@/lib/apiData";
 
 type SortKey = "nom";
 type SortDir = "asc" | "desc";
@@ -25,6 +27,7 @@ export default function AdminUsersPage() {
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [parcelsByUser, setParcelsByUser] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(false);
 
   const [sortKey, setSortKey] = useState<SortKey>("nom");
@@ -34,6 +37,8 @@ export default function AdminUsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editing, setEditing] = useState<UserRow | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
+  const currentUser = getCurrentUser();
   const pushRef = useRef(push);
   const tRef = useRef(t);
 
@@ -117,6 +122,17 @@ export default function AdminUsersPage() {
         }
         if (canceled) return;
         setUsers(list.map((u) => toUserRow(resolveUser(u) ?? (u as UserResponse))));
+        const terrains = await fetchTerrains();
+        const parcels = await fetchAllParcels(terrains);
+        if (canceled) return;
+        const terrainOwner = new Map(terrains.map((t) => [t.id, t.user_id]));
+        const counts = new Map<string, number>();
+        parcels.forEach((parcel) => {
+          const ownerId = terrainOwner.get(parcel.terrain_id);
+          if (!ownerId) return;
+          counts.set(ownerId, (counts.get(ownerId) ?? 0) + 1);
+        });
+        setParcelsByUser(counts);
       } catch {
         if (canceled) return;
         try {
@@ -132,6 +148,17 @@ export default function AdminUsersPage() {
             const json = await res.json();
             const list = resolveUserList(json);
             setUsers(list.map((u) => toUserRow(resolveUser(u) ?? (u as UserResponse))));
+            const terrains = await fetchTerrains();
+            const parcels = await fetchAllParcels(terrains);
+            if (canceled) return;
+            const terrainOwner = new Map(terrains.map((t) => [t.id, t.user_id]));
+            const counts = new Map<string, number>();
+            parcels.forEach((parcel) => {
+              const ownerId = terrainOwner.get(parcel.terrain_id);
+              if (!ownerId) return;
+              counts.set(ownerId, (counts.get(ownerId) ?? 0) + 1);
+            });
+            setParcelsByUser(counts);
             return;
           }
         } catch {
@@ -184,7 +211,6 @@ export default function AdminUsersPage() {
     return { total, items };
   }, [q, page, sortDir, sortKey, users]);
 
-  const parcelsByUser = useMemo(() => new Map<string, number>(), []);
 
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), totalPages);
@@ -257,6 +283,19 @@ export default function AdminUsersPage() {
       } catch {
         push({ title: t("profile_update_failed"), kind: "error" });
       }
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    const target = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await UsersService.deleteUserApiV1UsersUserIdDelete(target.id);
+      setUsers((prev) => prev.filter((user) => user.id !== target.id));
+      push({ title: t("delete_toast_title"), message: `${target.prenom} ${target.nom}`, kind: "success" });
+    } catch {
+      push({ title: t("profile_update_failed"), kind: "error" });
     }
   };
 
@@ -365,11 +404,31 @@ export default function AdminUsersPage() {
 
                         <button
                           type="button"
-                          className="rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-70"
-                          disabled
-                          title={t("feature_unavailable")}
+                          onClick={async () => {
+                            setConfirmDelete(u);
+                          }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
+                          aria-label={t("delete")}
+                          disabled={currentUser?.id === u.id}
+                          title={currentUser?.id === u.id ? t("delete_self_disabled") : t("delete")}
                         >
-                          {t("suspend")}
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                          </svg>
+                          <span className="sr-only">{t("delete")}</span>
                         </button>
                       </div>
                     </td>
@@ -398,6 +457,16 @@ export default function AdminUsersPage() {
         initial={editing}
         onClose={() => setModalOpen(false)}
         onSubmit={onSubmitModal}
+      />
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title={t("delete_confirm_title")}
+        message={t("delete_confirm_body")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("cancel")}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(null)}
       />
     </div>
   );

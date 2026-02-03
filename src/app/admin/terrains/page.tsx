@@ -11,7 +11,8 @@ import { useT } from "@/components/i18n/useT";
 import type { LocaliteResponse } from "@/lib/models/LocaliteResponse";
 import type { TerrainResponse } from "@/lib/models/TerrainResponse";
 import type { UserResponse } from "@/lib/models/UserResponse";
-import { fetchLocalites, fetchTerrains, fetchUsers } from "@/lib/apiData";
+import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
+import { fetchAllParcels, fetchLocalites, fetchTerrains, fetchUsers } from "@/lib/apiData";
 import { LocalitSService } from "@/lib/services/LocalitSService";
 import { TerrainsService } from "@/lib/services/TerrainsService";
 import { Continent } from "@/lib/models/Continent";
@@ -39,6 +40,7 @@ export default function TerrainsPage() {
   const [terrains, setTerrains] = useState<TerrainResponse[]>([]);
   const [localites, setLocalites] = useState<LocaliteResponse[]>([]);
   const [users, setUsers] = useState<UserResponse[]>([]);
+  const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
   const [loading, setLoading] = useState(false);
   useEffect(() => {
     let canceled = false;
@@ -50,10 +52,12 @@ export default function TerrainsPage() {
           fetchLocalites(),
           fetchUsers(),
         ]);
+        const parcelList = await fetchAllParcels(terrainList);
         if (canceled) return;
         setTerrains(terrainList);
         setLocalites(localiteList);
         setUsers(userList);
+        setParcels(parcelList);
       } catch {
         if (!canceled) push({ title: t("load_failed"), kind: "error" });
       } finally {
@@ -76,6 +80,14 @@ export default function TerrainsPage() {
   );
 
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
+  const terrainAreaMap = useMemo(() => {
+    const totals = new Map<string, number>();
+    parcels.forEach((parcel) => {
+      const current = totals.get(parcel.terrain_id) ?? 0;
+      totals.set(parcel.terrain_id, current + (parcel.superficie ?? 0));
+    });
+    return totals;
+  }, [parcels]);
 
   const listResult = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -220,7 +232,6 @@ export default function TerrainsPage() {
           <table className="min-w-full md:min-w-[980px] w-full text-left text-sm">
             <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
               <tr className="border-b border-gray-200 dark:border-gray-800">
-                <ThSortable label={t("table_id")} active={sortKey === "id"} dir={sortDir} onClick={() => toggleSort("id")} />
                 <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
                 <ThSortable label={t("table_owner")} active={sortKey === "user_id"} dir={sortDir} onClick={() => toggleSort("user_id")} />
                 <ThSortable label={t("table_area")} active={sortKey === "superficie_totale"} dir={sortDir} onClick={() => toggleSort("superficie_totale")} />
@@ -247,7 +258,6 @@ export default function TerrainsPage() {
                     key={row.id}
                     className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
                   >
-                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">{row.id}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{row.nom}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                       {owner ? (
@@ -265,7 +275,9 @@ export default function TerrainsPage() {
                         row.user_id
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
+                      {(terrainAreaMap.get(row.id) ?? 0).toLocaleString()} m²
+                    </td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                       {localiteMap.get(row.localite_id) ?? row.localite_id}
                     </td>
