@@ -3,17 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useT } from "@/components/i18n/useT";
-import { useToast } from "@/components/ui/ToastProvider";
 import { useLang } from "@/components/i18n/LangProvider";
+import { useToast } from "@/components/ui/ToastProvider";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import type { Capteur } from "@/lib/models/Capteur";
 import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
 import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
-import { fetchAllParcels } from "@/lib/apiData";
 import { CapteursService } from "@/lib/services/CapteursService";
 import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
 import { ParcellesService } from "@/lib/services/ParcellesService";
 import { unwrapData, unwrapList } from "@/lib/apiHelpers";
-import { clearSensorParcelLink, getSensorParcelMap, setSensorParcelLink } from "@/lib/sensorParcelStore";
 import {
   LineChart,
   Line,
@@ -42,9 +41,7 @@ export default function SensorDetailsPage() {
   const [measurements, setMeasurements] = useState<SensorMeasurementsResponse[]>([]);
   const [latest, setLatest] = useState<SensorMeasurementsResponse | null>(null);
   const [showCharts, setShowCharts] = useState(false);
-  const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
-  const [assignedParcelCode, setAssignedParcelCode] = useState("");
-  const canAssign = Boolean(sensor?.code && assignedParcelCode);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const metricsData = useMemo(() => {
     if (!measurements.length) return [];
@@ -80,30 +77,6 @@ export default function SensorDetailsPage() {
       canceled = true;
     };
   }, [id, refreshKey]);
-
-  useEffect(() => {
-    let canceled = false;
-    const loadParcels = async () => {
-      try {
-        const list = await fetchAllParcels();
-        if (canceled) return;
-        setParcels(list);
-      } catch {
-        if (!canceled) setParcels([]);
-      }
-    };
-    void loadParcels();
-    return () => {
-      canceled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!sensor) return;
-    setDraft({ nom: sensor.nom, dev_eui: sensor.dev_eui, code: sensor.code });
-    const map = getSensorParcelMap();
-    setAssignedParcelCode(map[sensor.code] ?? "");
-  }, [sensor]);
 
   useEffect(() => {
     let canceled = false;
@@ -186,17 +159,6 @@ export default function SensorDetailsPage() {
     };
   }, [measurements, parcel]);
 
-  useEffect(() => {
-    if (!assignedParcelCode) return;
-    const linked = parcels.find((p) => (p.code ?? "") === assignedParcelCode);
-    if (linked) setParcel(linked);
-  }, [assignedParcelCode, parcels]);
-
-  const assignedParcel = useMemo(() => {
-    if (!assignedParcelCode) return null;
-    return parcels.find((p) => (p.code ?? "") === assignedParcelCode) ?? null;
-  }, [assignedParcelCode, parcels]);
-
   if (!id) {
     return (
       <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
@@ -228,7 +190,51 @@ export default function SensorDetailsPage() {
 
   const level: "ok" | "warning" | "offline" =
     !latest ? "offline" : latest.humidity != null && latest.humidity < 35 ? "warning" : "ok";
-  const lastMeasure = latest?.humidity != null ? `${latest.humidity}%` : "—";
+
+  const handleSaveEdit = async () => {
+    const nom = draft.nom.trim();
+    const devEui = draft.dev_eui.trim().toUpperCase();
+
+    if (!nom) {
+      push({ title: t("invalidCredentials"), message: t("sensor_error_name"), kind: "error" });
+      return;
+    }
+    if (!/^[0-9A-F]{16}$/.test(devEui)) {
+      push({ title: t("invalidCredentials"), message: t("sensor_error_dev_eui"), kind: "error" });
+      return;
+    }
+
+    try {
+      await CapteursService.updateCapteurApiV1CapteursCapteurIdPut(sensor.id, {
+        nom,
+        dev_eui: devEui,
+      });
+      setRefreshKey((prev) => prev + 1);
+      setIsEditing(false);
+      push({
+        title: t("edit_sensor"),
+        message: nom,
+        kind: "success",
+      });
+    } catch {
+      push({ title: t("load_failed"), kind: "error" });
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleteOpen(false);
+    try {
+      await CapteursService.deleteCapteurApiV1CapteursCapteurIdDelete(sensor.id);
+      push({
+        title: t("delete_toast_title"),
+        message: sensor.nom,
+        kind: "success",
+      });
+      router.push("/admin/sensors");
+    } catch {
+      push({ title: t("load_failed"), kind: "error" });
+    }
+  };
 
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
@@ -268,7 +274,14 @@ export default function SensorDetailsPage() {
           </select>
           <button
             type="button"
-            onClick={() => setIsEditing((prev) => !prev)}
+            onClick={() => {
+              if (isEditing) {
+                setIsEditing(false);
+                return;
+              }
+              setDraft({ nom: sensor.nom, dev_eui: sensor.dev_eui, code: sensor.code });
+              setIsEditing(true);
+            }}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-white hover:bg-amber-600"
             aria-label={t("edit")}
           >
@@ -289,12 +302,7 @@ export default function SensorDetailsPage() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (!window.confirm(t("delete_confirm_body"))) return;
-              void CapteursService.deleteCapteurApiV1CapteursCapteurIdDelete(sensor.id).then(() => {
-                router.push("/admin/sensors");
-              });
-            }}
+            onClick={() => setDeleteOpen(true)}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
             aria-label={t("delete")}
           >
@@ -326,6 +334,10 @@ export default function SensorDetailsPage() {
             <Row label={t("table_name")} value={sensor.nom} />
             <Row label="DevEUI" value={sensor.dev_eui} />
             <Row label={t("sensor_status_label")} value={statusLabel(level, t)} />
+            <Row
+              label={t("table_parcels")}
+              value={parcel ? `${parcel.nom}${parcel.code ? ` (${parcel.code})` : ""}` : "—"}
+            />
           </div>
           {isEditing ? (
             <div className="mt-4 space-y-3 text-xs text-gray-700 dark:text-gray-300">
@@ -361,15 +373,7 @@ export default function SensorDetailsPage() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    void CapteursService.updateCapteurApiV1CapteursCapteurIdPut(sensor.id, {
-                      nom: draft.nom.trim(),
-                      dev_eui: draft.dev_eui.trim(),
-                    }).then(() => {
-                      setRefreshKey((prev) => prev + 1);
-                      setIsEditing(false);
-                    });
-                  }}
+                  onClick={() => void handleSaveEdit()}
                   className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
                 >
                   {t("save")}
@@ -407,125 +411,17 @@ export default function SensorDetailsPage() {
             <div className="mt-3 h-[220px] rounded-sm bg-gray-100 dark:bg-[#161b22]" />
           )}
         </div>
-
-        <div className="rounded-sm border border-gray-300 bg-white dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-3">
-          <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("linked_parcels")}</p>
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("sensor_parcels_subtitle")}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <select
-                value={assignedParcelCode}
-                onChange={(e) => setAssignedParcelCode(e.target.value)}
-                className="h-9 min-w-[220px] rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
-                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
-              >
-                <option value="">{t("table_parcels")}</option>
-                {parcels.map((p) => (
-                  <option key={p.id} value={p.code ?? ""} disabled={!p.code}>
-                    {p.nom} {p.code ? `(${p.code})` : ""}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!sensor?.code || !assignedParcelCode) {
-                    push({ title: t("load_failed"), kind: "error" });
-                    return;
-                  }
-                  void CapteursService.assignCapteurApiV1CapteursAssignPost(assignedParcelCode, sensor.code)
-                    .then(() => {
-                      setSensorParcelLink(sensor.code, assignedParcelCode);
-                      setRefreshKey((prev) => prev + 1);
-                    })
-                    .catch(() => {
-                      push({ title: t("load_failed"), kind: "error" });
-                    });
-                }}
-                className={`rounded-sm px-3 py-2 text-xs font-semibold text-white ${
-                  canAssign ? "bg-green-600 hover:bg-green-700" : "cursor-not-allowed bg-gray-300"
-                }`}
-                disabled={!canAssign}
-              >
-                {t("assign_sensor")}
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-[760px] w-full text-left text-sm">
-              <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
-                <tr className="border-b border-gray-200 dark:border-gray-800">
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_name")}</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_code")}</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_area")}</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("deassign")}</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {!assignedParcel ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
-                      {t("empty_parcels")}
-                    </td>
-                  </tr>
-                ) : (
-                  [assignedParcel].map((p) => (
-                    <tr
-                      key={p.id}
-                      className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
-                    >
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nom}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code ?? "—"}</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie.toLocaleString()}</td>
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!sensor?.code || !p.code) {
-                              push({ title: t("load_failed"), kind: "error" });
-                              return;
-                            }
-                            void CapteursService.desassignCapteurApiV1CapteursDesassignPost(p.code, sensor.code)
-                              .then(() => {
-                                clearSensorParcelLink(sensor.code);
-                                setAssignedParcelCode("");
-                                setRefreshKey((prev) => prev + 1);
-                              })
-                              .catch(() => {
-                                push({ title: t("load_failed"), kind: "error" });
-                              });
-                          }}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-sm bg-red-600 text-white hover:bg-red-700"
-                          aria-label={t("deassign")}
-                        >
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 24 24"
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M17 7l-10 10" />
-                            <path d="M7 7l10 10" />
-                            <path d="M16 3h5v5" />
-                            <path d="M8 21H3v-5" />
-                          </svg>
-                          <span className="sr-only">{t("deassign")}</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title={t("delete_confirm_title")}
+        message={t("delete_confirm_body")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("cancel")}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteOpen(false)}
+      />
     </div>
   );
 }

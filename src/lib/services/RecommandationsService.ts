@@ -92,10 +92,7 @@ export class RecommandationsService {
     }
     /**
      * Recommandation de culture (ML + Système Expert)
-     * Endpoint chef d'orchestre qui :
-     * 1. Appelle le service de Machine Learning pour prédire la culture idéale.
-     * 2. Utilise le Système Expert pour justifier et donner des conseils sur cette culture.
-     * 3. Agrège les résultats pour le frontend.
+     * Endpoint chef d'orchestre utilisant RecommendationService.
      * @param requestBody
      * @returns UnifiedRecommendationResponse Successful Response
      * @throws ApiError
@@ -115,8 +112,7 @@ export class RecommandationsService {
     }
     /**
      * Prédire la culture pour une parcelle (utilise les dernières mesures)
-     * Prédit la culture optimale pour une parcelle spécifique en utilisant ses dernières mesures de capteurs.
-     * Si des données sont fournies dans le body, elles surchargent celles de la base de données (optionnel).
+     * Prédit la culture optimale pour une parcelle spécifique via RecommendationService.
      * @param parcelleId
      * @param requestBody
      * @returns UnifiedRecommendationResponse Successful Response

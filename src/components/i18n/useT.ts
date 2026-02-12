@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useMemo } from "react";
 import { useLang } from "./LangProvider";
 import { translations } from "./translations";
 
@@ -9,7 +10,7 @@ import { translations } from "./translations";
 export function useT() {
   const { lang } = useLang();
 
-  function t(key: string): string {
+  const t = useCallback((key: string): string => {
     const value = translations[lang]?.[key];
 
     // Fallback: show key if missing translation
@@ -19,7 +20,7 @@ export function useT() {
     }
 
     return value;
-  }
+  }, [lang]);
 
-  return { t, lang };
+  return useMemo(() => ({ t, lang }), [t, lang]);
 }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
+import { useToast } from "@/components/ui/ToastProvider";
 import { useT } from "@/components/i18n/useT";
 import type { Capteur } from "@/lib/models/Capteur";
 import { fetchSensors } from "@/lib/apiData";
@@ -16,6 +17,7 @@ const PAGE_SIZE = 10;
 export default function SensorsPage() {
   const router = useRouter();
   const { query, setQuery } = useAdminSearch();
+  const { push } = useToast();
   const { t } = useT();
 
   const [page, setPage] = useState(1);
@@ -36,6 +38,7 @@ export default function SensorsPage() {
       } catch {
         if (!canceled) {
           setSensors([]);
+          push({ title: t("load_failed"), kind: "error" });
         }
       }
     };
@@ -43,7 +46,7 @@ export default function SensorsPage() {
     return () => {
       canceled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, push, t]);
 
   const listResult = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -161,18 +164,45 @@ export default function SensorsPage() {
           <div className="mt-3 flex items-center gap-2">
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
+                const nom = draft.nom.trim();
+                const devEui = draft.dev_eui.trim().toUpperCase();
+                const code = draft.code.trim();
+
+                if (!nom) {
+                  push({ title: t("invalidCredentials"), message: t("sensor_error_name"), kind: "error" });
+                  return;
+                }
+                if (!/^[0-9A-F]{16}$/.test(devEui)) {
+                  push({ title: t("invalidCredentials"), message: t("sensor_error_dev_eui"), kind: "error" });
+                  return;
+                }
+                if (!code) {
+                  push({ title: t("invalidCredentials"), message: t("sensor_error_code"), kind: "error" });
+                  return;
+                }
+
                 const now = new Date().toISOString();
-                void CapteursService.createCapteurApiV1CapteursPost({
-                  nom: draft.nom.trim() || "Capteur",
-                  dev_eui: draft.dev_eui.trim() || `AUTO-${Date.now()}`,
-                  code: draft.code.trim() || `CPT-${Date.now()}`,
-                  date_installation: now,
-                  date_activation: now,
-                }).then(() => {
+                try {
+                  const createdPayload = await CapteursService.createCapteurApiV1CapteursPost({
+                    nom,
+                    dev_eui: devEui,
+                    code,
+                    date_installation: now,
+                    date_activation: now,
+                  });
+                  const created = unwrapData<Capteur>(createdPayload);
                   setRefreshKey((k) => k + 1);
                   setIsAdding(false);
-                });
+                  setPage(1);
+                  push({
+                    title: t("add_sensor"),
+                    message: created?.nom ?? nom,
+                    kind: "success",
+                  });
+                } catch {
+                  push({ title: t("load_failed"), kind: "error" });
+                }
               }}
               className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
             >

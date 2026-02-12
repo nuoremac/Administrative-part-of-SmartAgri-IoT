@@ -11,6 +11,7 @@ export type UnifiedRecommendationResponse = {
     recommended_crop: string;
     confidence_score: number;
     justification: string;
+    detailed_justifications?: (Record<string, string> | null);
     ml_details: MLPredictResponse;
     expert_details?: (ExpertSystemResponse | null);
     generated_at: string;

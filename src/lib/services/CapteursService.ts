@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CapParcelle } from '../models/CapParcelle';
 import type { Capteur } from '../models/Capteur';
 import type { CapteurCreate } from '../models/CapteurCreate';
 import type { CapteurUpdate } from '../models/CapteurUpdate';
@@ -146,13 +147,13 @@ export class CapteursService {
      * Assigne un capteur à une parcelle. Accessible à tous les utilisateurs connectés.
      * @param codeParcelle
      * @param codeCapteur
-     * @returns any Successful Response
+     * @returns CapParcelle Successful Response
      * @throws ApiError
      */
     public static assignCapteurApiV1CapteursAssignPost(
         codeParcelle: string,
         codeCapteur: string,
-    ): CancelablePromise<any> {
+    ): CancelablePromise<CapParcelle> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/capteurs/assign',
@@ -170,19 +171,43 @@ export class CapteursService {
      * Désassigne un capteur d'une parcelle. Accessible à tous les utilisateurs connectés.
      * @param codeParcelle
      * @param codeCapteur
-     * @returns any Successful Response
+     * @returns CapParcelle Successful Response
      * @throws ApiError
      */
     public static desassignCapteurApiV1CapteursDesassignPost(
         codeParcelle: string,
         codeCapteur: string,
-    ): CancelablePromise<any> {
+    ): CancelablePromise<CapParcelle> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/capteurs/desassign',
             query: {
                 'code_parcelle': codeParcelle,
                 'code_capteur': codeCapteur,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Lister toutes les assignations actives
+     * Récupère la liste de toutes les assignations actives entre capteurs et parcelles.
+     * @param skip
+     * @param limit
+     * @returns CapParcelle Successful Response
+     * @throws ApiError
+     */
+    public static getAssignmentsApiV1CapteursAssignmentsAllGet(
+        skip?: number,
+        limit: number = 100,
+    ): CancelablePromise<Array<CapParcelle>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/capteurs/assignments/all',
+            query: {
+                'skip': skip,
+                'limit': limit,
             },
             errors: {
                 422: `Validation Error`,

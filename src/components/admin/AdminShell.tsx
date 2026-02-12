@@ -6,7 +6,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { UserResponse } from "@/lib/models/UserResponse";
 import { AuthenticationService } from "@/lib/services/AuthenticationService";
-import { clearAuthSession, getAccessToken, getCurrentUser, saveCurrentUser } from "@/lib/authSession";
+import {
+  CURRENT_USER_KEY,
+  CURRENT_USER_UPDATED_EVENT,
+  clearAuthSession,
+  getAccessToken,
+  getCurrentUser,
+  saveCurrentUser,
+} from "@/lib/authSession";
 import { UserRole_Output } from "@/lib/models/UserRole_Output";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
@@ -81,6 +88,15 @@ function IconProfile() {
   return <span className="text-sm">👤</span>;
 }
 
+function IconNotifications() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M15 18h5l-1.4-1.4A2 2 0 0 1 18 15.2V11a6 6 0 1 0-12 0v4.2a2 2 0 0 1-.6 1.4L4 18h5" />
+      <path d="M10 18a2 2 0 0 0 4 0" />
+    </svg>
+  );
+}
+
 // Nouvelles icônes pour le thème
 function IconSun() {
   return (
@@ -108,6 +124,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const { lang, setLang } = useLang();
   const { t } = useT();
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(null);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
 
   const resolveUser = (payload: unknown): UserResponse | null => {
     if (!payload || typeof payload !== "object") return null;
@@ -186,6 +203,43 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     return role || "Admin";
   }, [currentUser?.role, t]);
 
+  const avatarUrl = useMemo(() => {
+    const raw = currentUser?.avatar?.trim() ?? "";
+    if (!raw) return null;
+    if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("/") || raw.startsWith("data:image/")) return raw;
+    return null;
+  }, [currentUser?.avatar]);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [avatarUrl]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncCurrentUser = () => {
+      setCurrentUser(getCurrentUser());
+    };
+
+    const handleCurrentUserUpdated = () => {
+      syncCurrentUser();
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === CURRENT_USER_KEY) {
+        syncCurrentUser();
+      }
+    };
+
+    window.addEventListener(CURRENT_USER_UPDATED_EVENT, handleCurrentUserUpdated);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(CURRENT_USER_UPDATED_EVENT, handleCurrentUserUpdated);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
   const nav: NavItem[] = useMemo(
     () => [
       { href: "/admin/dashboard", label: t("nav_dashboard"), icon: <IconDashboard /> },
@@ -193,14 +247,21 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       { href: "/admin/terrains", label: t("nav_terrains"), icon: <IconTerrains /> },
       { href: "/admin/parcels", label: t("nav_parcels"), icon: <IconParcels /> },
       { href: "/admin/sensors", label: t("nav_sensors"), icon: <IconSensors /> },
+      { href: "/admin/notifications", label: t("nav_notifications"), icon: <IconNotifications /> },
       { href: "/admin/profile", label: t("nav_profile"), icon: <IconProfile /> },
     ],
     [t]
   );
 
-  const logout = () => {
-    clearAuthSession();
-    router.push("/login");
+  const logout = async () => {
+    try {
+      await AuthenticationService.logoutApiV1AuthLogoutPost();
+    } catch {
+      // best-effort server logout
+    } finally {
+      clearAuthSession();
+      router.push("/login");
+    }
   };
 
   const Sidebar = (
@@ -217,8 +278,20 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       <div className="px-3 pt-2">
         <div className="rounded-md bg-green-100 px-3 py-3 dark:bg-[#0d1117]">
           <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-sm font-bold text-white">
-            {initials}
+          <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-green-600 text-sm font-bold text-white">
+            {avatarUrl && !avatarLoadFailed ? (
+              <Image
+                src={avatarUrl}
+                alt={displayName}
+                fill
+                sizes="32px"
+                unoptimized
+                className="object-cover"
+                onError={() => setAvatarLoadFailed(true)}
+              />
+            ) : (
+              initials
+            )}
           </div>
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold text-green-950 dark:text-gray-100">

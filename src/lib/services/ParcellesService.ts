@@ -37,6 +37,30 @@ export class ParcellesService {
         });
     }
     /**
+     * Lister toutes les parcelles
+     * Récupérer la liste de toutes les parcelles.
+     * @param skip
+     * @param limit
+     * @returns ParcelleResponse Successful Response
+     * @throws ApiError
+     */
+    public static getAllParcellesApiV1ParcellesParcellesGet(
+        skip?: number,
+        limit: number = 100,
+    ): CancelablePromise<Array<ParcelleResponse>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/parcelles/parcelles/',
+            query: {
+                'skip': skip,
+                'limit': limit,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Récupérer les parcelles d'un terrain
      * Récupérer toutes les parcelles d'un terrain spécifique.
      * @param terrainId

@@ -6,10 +6,16 @@ let configured = false;
 export function initOpenApi() {
   if (configured) return;
   configured = true;
+
+  const envBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (envBase) {
+    OpenAPI.BASE = envBase.replace(/\/+$/, "");
+  }
+
   OpenAPI.TOKEN = async () => getAccessToken() || "";
 }
 
-// Ensure token resolver is set as early as possible on the client.
 if (typeof window !== "undefined") {
   initOpenApi();
 }
+

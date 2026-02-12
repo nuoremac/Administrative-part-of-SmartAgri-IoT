@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { NotificationMode } from './NotificationMode';
+import type { RecommendationFrequency } from './RecommendationFrequency';
 import type { UserRole_Output } from './UserRole_Output';
 export type UserResponse = {
     id: string;
@@ -11,6 +13,8 @@ export type UserResponse = {
     telephone: (string | null);
     role: UserRole_Output;
     avatar?: (string | null);
+    notification_modes?: Array<NotificationMode>;
+    recommendation_frequency: RecommendationFrequency;
     date_inscription: string;
     dernier_acces?: (string | null);
     created_at: string;

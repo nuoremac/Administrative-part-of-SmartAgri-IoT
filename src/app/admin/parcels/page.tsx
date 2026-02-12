@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -16,6 +16,7 @@ import { unwrapData } from "@/lib/apiHelpers";
 type SortKey = "id" | "nom" | "code" | "type_sol" | "culture_actuelle" | "superficie" | "terrain_id";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
+const normalizeId = (value: unknown) => String(value ?? "").trim();
 
 export default function ParcelsPage() {
   const router = useRouter();
@@ -31,6 +32,9 @@ export default function ParcelsPage() {
   const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
   const [terrains, setTerrains] = useState<TerrainResponse[]>([]);
   const [terrainNames, setTerrainNames] = useState<Map<string, string>>(new Map());
+  const [isAdding, setIsAdding] = useState(false);
+  const [draft, setDraft] = useState({ nom: "", superficie: "", terrain_id: "" });
+
   useEffect(() => {
     let canceled = false;
     const load = async () => {
@@ -50,14 +54,23 @@ export default function ParcelsPage() {
     };
   }, [refreshKey, push, t]);
 
-
-  const terrainMap = useMemo(() => new Map(terrains.map((tRow) => [tRow.id, tRow.nom])), [terrains]);
+  const terrainMap = useMemo(
+    () =>
+      new Map(
+        terrains
+          .map((tRow) => [normalizeId(tRow.id), tRow.nom] as const)
+          .filter(([id]) => !!id)
+      ),
+    [terrains]
+  );
 
   useEffect(() => {
     let canceled = false;
     const loadMissingTerrains = async () => {
       const known = new Map(terrainMap);
-      const missingIds = Array.from(new Set(parcels.map((p) => p.terrain_id))).filter((id) => !known.has(id));
+      const missingIds = Array.from(new Set(parcels.map((p) => normalizeId(p.terrain_id)))).filter(
+        (id) => id && !known.has(id)
+      );
       if (!missingIds.length) {
         setTerrainNames(known);
         return;
@@ -73,7 +86,7 @@ export default function ParcelsPage() {
         );
         if (canceled) return;
         fetched.forEach((terrain) => {
-          if (terrain) known.set(terrain.id, terrain.nom);
+          if (terrain) known.set(normalizeId(terrain.id), terrain.nom);
         });
         setTerrainNames(known);
       } catch {
@@ -86,15 +99,35 @@ export default function ParcelsPage() {
     };
   }, [parcels, terrainMap]);
 
+  const resolveTerrainName = useCallback((parcel: ParcelleResponse): string | null => {
+    const raw = parcel as ParcelleResponse & {
+      terrain_nom?: string | null;
+      terrain_name?: string | null;
+      nom_terrain?: string | null;
+      terrain?: { nom?: string | null } | null;
+    };
+
+    const directName = raw.terrain_nom ?? raw.terrain_name ?? raw.nom_terrain ?? raw.terrain?.nom ?? null;
+    if (typeof directName === "string" && directName.trim()) {
+      return directName.trim();
+    }
+
+    const terrainId = normalizeId(parcel.terrain_id);
+    if (!terrainId) return null;
+    return terrainNames.get(terrainId) ?? terrainMap.get(terrainId) ?? null;
+  }, [terrainMap, terrainNames]);
+
   const listResult = useMemo(() => {
     const search = query.trim().toLowerCase();
     const filtered = parcels.filter((row) => {
       if (!search) return true;
+      const terrainName = resolveTerrainName(row)?.toLowerCase() ?? "";
       return (
         row.id.toLowerCase().includes(search) ||
         row.nom.toLowerCase().includes(search) ||
         (row.code ?? "").toLowerCase().includes(search) ||
-        row.terrain_id.toLowerCase().includes(search)
+        normalizeId(row.terrain_id).toLowerCase().includes(search) ||
+        terrainName.includes(search)
       );
     });
 
@@ -103,6 +136,7 @@ export default function ParcelsPage() {
       const getValue = (row: ParcelleResponse) => {
         if (sortKey === "type_sol") return "";
         if (sortKey === "culture_actuelle") return "";
+        if (sortKey === "terrain_id") return resolveTerrainName(row) ?? normalizeId(row.terrain_id);
         return (row as Record<string, unknown>)[sortKey] ?? "";
       };
       const av = getValue(a);
@@ -115,7 +149,7 @@ export default function ParcelsPage() {
     const start = (page - 1) * PAGE_SIZE;
     const items = sorted.slice(start, start + PAGE_SIZE);
     return { items, total };
-  }, [query, sortKey, sortDir, page, parcels]);
+  }, [query, sortKey, sortDir, page, parcels, resolveTerrainName]);
 
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), totalPages);
@@ -158,17 +192,133 @@ export default function ParcelsPage() {
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("parcels_subtitle")}</p>
         </div>
 
-        {query ? (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setQuery("")}
-            className="rounded-sm border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
-                       dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-200 dark:hover:bg-[#0d1117]"
+              onClick={() => {
+                setIsAdding((prev) => !prev);
+                if (!isAdding) {
+                  setDraft(() => ({
+                    nom: "",
+                    superficie: "",
+                    terrain_id: normalizeId(terrains[0]?.id),
+                  }));
+                }
+              }}
+            className="rounded-sm bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
           >
-            {t("clear")}
+            + {t("add_parcel")}
           </button>
-        ) : null}
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="rounded-sm border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50
+                         dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-200 dark:hover:bg-[#0d1117]"
+            >
+              {t("clear")}
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {isAdding ? (
+        <div className="mb-4 rounded-sm border border-gray-300 bg-white p-4 text-xs text-gray-700 dark:border-gray-800 dark:bg-[#0d1117] dark:text-gray-300">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div>
+              <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{t("table_name")}</label>
+              <input
+                value={draft.nom}
+                onChange={(e) => setDraft((prev) => ({ ...prev, nom: e.target.value }))}
+                className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{t("table_area")}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={draft.superficie}
+                onChange={(e) => setDraft((prev) => ({ ...prev, superficie: e.target.value }))}
+                className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{t("table_terrain")}</label>
+              <select
+                value={draft.terrain_id}
+                onChange={(e) => setDraft((prev) => ({ ...prev, terrain_id: e.target.value }))}
+                className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
+                           dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
+              >
+                <option value="">{t("table_terrain")}</option>
+                {terrains.map((terrain) => (
+                  <option key={normalizeId(terrain.id)} value={normalizeId(terrain.id)}>
+                    {terrain.nom}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const nom = draft.nom.trim();
+                const superficie = Number(draft.superficie);
+                const terrainId = draft.terrain_id;
+
+                if (!nom) {
+                  push({ title: t("invalidCredentials"), message: t("parcel_error_name"), kind: "error" });
+                  return;
+                }
+                if (!terrainId) {
+                  push({ title: t("invalidCredentials"), message: t("table_terrain"), kind: "error" });
+                  return;
+                }
+                if (!Number.isFinite(superficie) || superficie <= 0) {
+                  push({ title: t("invalidCredentials"), message: t("parcel_error_area"), kind: "error" });
+                  return;
+                }
+
+                try {
+                  const createdPayload = await ParcellesService.createParcelleApiV1ParcellesParcellesPost({
+                    nom,
+                    terrain_id: terrainId,
+                    superficie,
+                  });
+                  const created = unwrapData<ParcelleResponse>(createdPayload);
+                  setRefreshKey((k) => k + 1);
+                  setIsAdding(false);
+                  setPage(1);
+                  push({
+                    title: t("add_parcel"),
+                    message: created?.nom ?? nom,
+                    kind: "success",
+                  });
+                } catch {
+                  push({ title: t("load_failed"), kind: "error" });
+                }
+              }}
+              className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
+            >
+              {t("save")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAdding(false)}
+              className="rounded-sm border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50
+                         dark:border-gray-700 dark:text-gray-200 dark:hover:bg-[#161b22]"
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-sm border border-gray-400 bg-white dark:border-gray-800 dark:bg-[#0d1117]">
         <div className="overflow-x-auto">
@@ -204,7 +354,7 @@ export default function ParcelsPage() {
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie} m²</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                      {terrainNames.get(p.terrain_id) ?? p.terrain_id}
+                      {resolveTerrainName(p) ?? "—"}
                     </td>
 
                     <td className="px-4 py-3">

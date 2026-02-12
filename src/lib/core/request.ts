@@ -8,6 +8,7 @@ import type { ApiResult } from './ApiResult';
 import { CancelablePromise } from './CancelablePromise';
 import type { OnCancel } from './CancelablePromise';
 import type { OpenAPIConfig } from './OpenAPI';
+import { clearAuthSession, getRefreshToken, saveAuthSession } from '@/lib/authSession';
 
 export const isDefined = <T>(value: T | null | undefined): value is Exclude<T, null | undefined> => {
     return value !== undefined && value !== null;
@@ -98,6 +99,98 @@ const getUrl = (config: OpenAPIConfig, options: ApiRequestOptions): string => {
         return `${url}${getQueryString(options.query)}`;
     }
     return url;
+};
+
+const AUTH_REFRESH_EXCLUDED_PATHS = [
+    '/api/v1/auth/login',
+    '/api/v1/auth/refresh',
+    '/api/v1/auth/register/user',
+    '/api/v1/auth/register/admin',
+    '/api/v1/auth/validate-token',
+    '/api/v1/auth/verify-token',
+    '/api/v1/auth/logout',
+];
+
+let refreshTokenPromise: Promise<string | null> | null = null;
+
+const shouldAttemptTokenRefresh = (options: ApiRequestOptions, alreadyRetried: boolean): boolean => {
+    if (alreadyRetried) return false;
+    return !AUTH_REFRESH_EXCLUDED_PATHS.some((path) => options.url.startsWith(path));
+};
+
+const redirectToLogin = (): void => {
+    if (typeof window === 'undefined') return;
+    if (window.location.pathname.startsWith('/login')) return;
+    window.location.replace('/login');
+};
+
+const extractAccessToken = (payload: unknown): string | null => {
+    const resolved = payload && typeof payload === 'object' && 'data' in payload
+        ? (payload as { data: unknown }).data
+        : payload;
+
+    if (!resolved || typeof resolved !== 'object') return null;
+    const accessToken = (resolved as { access_token?: unknown }).access_token;
+    if (!isStringWithValue(accessToken)) return null;
+    return accessToken;
+};
+
+const refreshAccessToken = async (config: OpenAPIConfig): Promise<string | null> => {
+    if (!refreshTokenPromise) {
+        refreshTokenPromise = (async () => {
+            const refreshToken = getRefreshToken();
+            if (!isStringWithValue(refreshToken)) {
+                clearAuthSession();
+                redirectToLogin();
+                return null;
+            }
+
+            try {
+                const refreshUrl = `${config.BASE}/api/v1/auth/refresh`;
+                const response = await fetch(refreshUrl, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ refresh_token: refreshToken }),
+                    credentials: config.WITH_CREDENTIALS ? config.CREDENTIALS : undefined,
+                });
+
+                if (!response.ok) {
+                    clearAuthSession();
+                    redirectToLogin();
+                    return null;
+                }
+
+                let payload: unknown = undefined;
+                const contentType = response.headers.get('Content-Type')?.toLowerCase() ?? '';
+                if (contentType.startsWith('application/json') || contentType.startsWith('application/problem+json')) {
+                    payload = await response.json();
+                } else {
+                    payload = await response.text();
+                }
+
+                const accessToken = extractAccessToken(payload);
+                if (!accessToken) {
+                    clearAuthSession();
+                    redirectToLogin();
+                    return null;
+                }
+
+                saveAuthSession(payload);
+                return accessToken;
+            } catch {
+                clearAuthSession();
+                redirectToLogin();
+                return null;
+            } finally {
+                refreshTokenPromise = null;
+            }
+        })();
+    }
+
+    return refreshTokenPromise;
 };
 
 export const getFormData = (options: ApiRequestOptions): FormData | undefined => {
@@ -296,12 +389,29 @@ export const request = <T>(config: OpenAPIConfig, options: ApiRequestOptions): C
             const url = getUrl(config, options);
             const formData = getFormData(options);
             const body = getRequestBody(options);
-            const headers = await getHeaders(config, options);
+            const retryableOptions = options as ApiRequestOptions & { __retriedWithRefresh?: boolean };
+            const headers = await getHeaders(config, retryableOptions);
 
             if (!onCancel.isCancelled) {
-                const response = await sendRequest(config, options, url, body, formData, headers, onCancel);
+                let response = await sendRequest(config, retryableOptions, url, body, formData, headers, onCancel);
+
+                if (
+                    response.status === 401 &&
+                    shouldAttemptTokenRefresh(retryableOptions, !!retryableOptions.__retriedWithRefresh)
+                ) {
+                    const refreshedToken = await refreshAccessToken(config);
+                    if (refreshedToken && !onCancel.isCancelled) {
+                        const retryOptions = {
+                            ...retryableOptions,
+                            __retriedWithRefresh: true,
+                        } as ApiRequestOptions & { __retriedWithRefresh?: boolean };
+                        const retryHeaders = await getHeaders(config, retryOptions);
+                        response = await sendRequest(config, retryOptions, url, body, formData, retryHeaders, onCancel);
+                    }
+                }
+
                 const responseBody = await getResponseBody(response);
-                const responseHeader = getResponseHeader(response, options.responseHeader);
+                const responseHeader = getResponseHeader(response, retryableOptions.responseHeader);
 
                 const result: ApiResult = {
                     url,
@@ -311,7 +421,7 @@ export const request = <T>(config: OpenAPIConfig, options: ApiRequestOptions): C
                     body: responseHeader ?? responseBody,
                 };
 
-                catchErrorCodes(options, result);
+                catchErrorCodes(retryableOptions, result);
 
                 resolve(result.body);
             }

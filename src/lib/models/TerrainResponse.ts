@@ -6,6 +6,7 @@ export type TerrainResponse = {
     nom: string;
     description?: (string | null);
     localite_id: string;
+    superficie?: (number | null);
     id: string;
     user_id: string;
     nombre_parcelles?: (number | null);

@@ -2,9 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type TerrainUpdate = {
-    nom?: (string | null);
-    description?: (string | null);
-    superficie?: (number | null);
+export type NotificationResponse = {
+    success: boolean;
+    message: string;
+    details?: (Record<string, any> | null);
 };
 

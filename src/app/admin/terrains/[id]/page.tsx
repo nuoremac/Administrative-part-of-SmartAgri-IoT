@@ -13,7 +13,6 @@ import type { TerrainResponse } from "@/lib/models/TerrainResponse";
 import { fetchLocalites, fetchParcelsByTerrain, fetchTerrains, fetchUsers } from "@/lib/apiData";
 import { LocalitSService } from "@/lib/services/LocalitSService";
 import { TerrainsService } from "@/lib/services/TerrainsService";
-import { unwrapData } from "@/lib/apiHelpers";
 import { Continent } from "@/lib/models/Continent";
 import { ClimateZone } from "@/lib/models/ClimateZone";
 import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";

@@ -4,16 +4,16 @@ import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
 import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
 import type { TerrainResponse } from "@/lib/models/TerrainResponse";
 import type { UserResponse } from "@/lib/models/UserResponse";
+import { AdministrationService } from "@/lib/services/AdministrationService";
 import { CapteursService } from "@/lib/services/CapteursService";
 import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
 import { LocalitSService } from "@/lib/services/LocalitSService";
 import { ParcellesService } from "@/lib/services/ParcellesService";
 import { TerrainsService } from "@/lib/services/TerrainsService";
 import { UsersService } from "@/lib/services/UsersService";
-import { AdministrationService } from "@/lib/services/AdministrationService";
-import { unwrapList } from "@/lib/apiHelpers";
 import { OpenAPI } from "@/lib/core/OpenAPI";
 import { getAccessToken } from "@/lib/authSession";
+import { unwrapList } from "@/lib/apiHelpers";
 
 const DEFAULT_LIMIT = 100;
 const DEFAULT_TTL_MS = 60_000;
@@ -39,6 +39,7 @@ export async function fetchTerrains(limit = DEFAULT_LIMIT): Promise<TerrainRespo
   const cacheKey = `terrains:${limit}`;
   const cached = readCache<TerrainResponse[]>(cacheKey);
   if (cached) return cached;
+
   try {
     const adminPayload = await AdministrationService.getAllTerrainsAdminApiV1AdminTerrainsGet(undefined, limit);
     const adminList = unwrapList<TerrainResponse>(adminPayload);
@@ -47,7 +48,7 @@ export async function fetchTerrains(limit = DEFAULT_LIMIT): Promise<TerrainRespo
       return adminList;
     }
   } catch {
-    // fall through to user-scoped terrains
+    // fallback to user-scoped endpoint
   }
 
   const payload = await TerrainsService.getAllTerrainsApiV1TerrainsTerrainsGet(undefined, limit);
@@ -60,6 +61,7 @@ export async function fetchLocalites(limit = DEFAULT_LIMIT): Promise<LocaliteRes
   const cacheKey = `localites:${limit}`;
   const cached = readCache<LocaliteResponse[]>(cacheKey);
   if (cached) return cached;
+
   const payload = await LocalitSService.getAllLocalitesApiV1LocalitesLocalitesGet(undefined, limit);
   const list = unwrapList<LocaliteResponse>(payload);
   writeCache(cacheKey, list);
@@ -70,6 +72,7 @@ export async function fetchUsers(limit = DEFAULT_LIMIT): Promise<UserResponse[]>
   const cacheKey = `users:${limit}`;
   const cached = readCache<UserResponse[]>(cacheKey);
   if (cached) return cached;
+
   try {
     const payload = await UsersService.getAllUsersApiV1UsersGet(undefined, limit);
     const list = unwrapList<UserResponse>(payload);
@@ -78,27 +81,35 @@ export async function fetchUsers(limit = DEFAULT_LIMIT): Promise<UserResponse[]>
       return list;
     }
   } catch {
-    // fall through to direct fetch
+    // fallback to direct fetch
   }
 
   const token = getAccessToken();
-  const res = await fetch(`${OpenAPI.BASE}/api/v1/users?limit=${limit}`, {
-    headers: {
-      Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  if (!res.ok) return [];
-  const json = await res.json();
-  const list = unwrapList<UserResponse>(json);
-  writeCache(cacheKey, list);
-  return list;
+  try {
+    const res = await fetch(`${OpenAPI.BASE}/api/v1/users?limit=${limit}`, {
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const list = unwrapList<UserResponse>(json);
+      writeCache(cacheKey, list);
+      return list;
+    }
+  } catch {
+    // ignore fallback failure
+  }
+
+  return [];
 }
 
 export async function fetchSensors(limit = DEFAULT_LIMIT): Promise<Capteur[]> {
   const cacheKey = `sensors:${limit}`;
   const cached = readCache<Capteur[]>(cacheKey);
   if (cached) return cached;
+
   const payload = await CapteursService.readCapteursApiV1CapteursGet(undefined, limit);
   const list = unwrapList<Capteur>(payload);
   writeCache(cacheKey, list);
@@ -109,6 +120,7 @@ export async function fetchParcelsByTerrain(terrainId: string, limit = DEFAULT_L
   const cacheKey = `parcels:terrain:${terrainId}:${limit}`;
   const cached = readCache<ParcelleResponse[]>(cacheKey);
   if (cached) return cached;
+
   let list: ParcelleResponse[] = [];
   try {
     const payload = await ParcellesService.getParcellesByTerrainApiV1ParcellesParcellesTerrainTerrainIdGet(
@@ -138,8 +150,9 @@ async function fetchAllParcelsDirect(limit = DEFAULT_LIMIT): Promise<ParcelleRes
     const adminList = unwrapList<ParcelleResponse>(adminPayload);
     if (adminList.length) return adminList;
   } catch {
-    // fall through
+    // fallback to direct fetch
   }
+
   const token = getAccessToken();
   try {
     const res = await fetch(`${OpenAPI.BASE}/api/v1/parcelles/parcelles?limit=${limit}`, {
@@ -156,6 +169,7 @@ async function fetchAllParcelsDirect(limit = DEFAULT_LIMIT): Promise<ParcelleRes
   } catch {
     // ignore
   }
+
   return [];
 }
 
@@ -163,16 +177,21 @@ export async function fetchAllParcels(terrains?: TerrainResponse[]): Promise<Par
   const cacheKey = `parcels:all:${DEFAULT_LIMIT}`;
   const cached = readCache<ParcelleResponse[]>(cacheKey);
   if (cached) return cached;
+
   try {
-    const adminPayload = await AdministrationService.getAllParcellesAdminApiV1AdminParcellesGet(undefined, DEFAULT_LIMIT);
+    const adminPayload = await AdministrationService.getAllParcellesAdminApiV1AdminParcellesGet(
+      undefined,
+      DEFAULT_LIMIT
+    );
     const adminList = unwrapList<ParcelleResponse>(adminPayload);
     if (adminList.length) {
       writeCache(cacheKey, adminList);
       return adminList;
     }
   } catch {
-    // fall through
+    // fallback
   }
+
   const token = getAccessToken();
   try {
     const res = await fetch(`${OpenAPI.BASE}/api/v1/parcelles/parcelles?limit=${DEFAULT_LIMIT}`, {
@@ -190,14 +209,13 @@ export async function fetchAllParcels(terrains?: TerrainResponse[]): Promise<Par
       }
     }
   } catch {
-    // fall through to per-terrain fetch
+    // fallback to per-terrain fetch
   }
 
   const terrainList = terrains ?? (await fetchTerrains());
   if (!terrainList.length) return [];
-  const results = await Promise.all(
-    terrainList.map((terrain) => fetchParcelsByTerrain(terrain.id))
-  );
+
+  const results = await Promise.all(terrainList.map((terrain) => fetchParcelsByTerrain(terrain.id)));
   const list = results.flat();
   writeCache(cacheKey, list);
   return list;
@@ -207,11 +225,10 @@ export async function fetchAllMeasurements(limit = DEFAULT_LIMIT): Promise<Senso
   const cacheKey = `measurements:${limit}`;
   const cached = readCache<SensorMeasurementsResponse[]>(cacheKey);
   if (cached) return cached;
-  const payload = await DonnEsDeCapteursService.getAllMeasurementsApiV1SensorDataSensorDataGet(
-    undefined,
-    limit
-  );
+
+  const payload = await DonnEsDeCapteursService.getAllMeasurementsApiV1SensorDataSensorDataGet(undefined, limit);
   const list = unwrapList<SensorMeasurementsResponse>(payload);
   writeCache(cacheKey, list);
   return list;
 }
+

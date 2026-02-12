@@ -2,9 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type TerrainUpdate = {
-    nom?: (string | null);
-    description?: (string | null);
-    superficie?: (number | null);
-};
-
+export enum NotificationMode {
+    EMAIL = 'email',
+    WHATSAPP = 'whatsapp',
+    SMS = 'sms',
+    TELEGRAM = 'telegram',
+}

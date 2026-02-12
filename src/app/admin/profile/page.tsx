@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import type { UserResponse } from "@/lib/models/UserResponse";
+import type { UserUpdate } from "@/lib/models/UserUpdate";
+import { ApiError } from "@/lib/core/ApiError";
 import { AuthenticationService } from "@/lib/services/AuthenticationService";
 import { UsersService } from "@/lib/services/UsersService";
 import { getCurrentUser, saveCurrentUser } from "@/lib/authSession";
@@ -21,12 +24,45 @@ export default function AdminProfilePage() {
   const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [avatarPreviewFailed, setAvatarPreviewFailed] = useState(false);
+
+  const isDataImageAvatar = (value: string) => value.startsWith("data:image/");
+
+  const persistUser = (nextUser: UserResponse) => {
+    setUser(nextUser);
+    try {
+      saveCurrentUser(nextUser);
+    } catch {}
+  };
+
   const resolveUser = (payload: unknown): UserResponse | null => {
     if (!payload || typeof payload !== "object") return null;
     if ("data" in payload) {
       return (payload as { data: UserResponse }).data;
     }
     return payload as UserResponse;
+  };
+
+  const resolveApiErrorMessage = (error: unknown): string | undefined => {
+    if (!(error instanceof ApiError)) return undefined;
+    const body = error.body;
+    if (typeof body === "string" && body.trim()) return body;
+    if (!body || typeof body !== "object") return undefined;
+
+    const message = (body as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+
+    const detail = (body as { detail?: unknown }).detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const first = detail[0];
+      if (first && typeof first === "object") {
+        const msg = (first as { msg?: unknown }).msg;
+        if (typeof msg === "string" && msg.trim()) return msg;
+      }
+    }
+
+    return undefined;
   };
 
   useEffect(() => {
@@ -40,8 +76,13 @@ export default function AdminProfilePage() {
         if (canceled) return;
         const resolved = resolveUser(fetched);
         if (!resolved) return;
-        saveCurrentUser(resolved);
-        setUser(resolved);
+        const localAvatar = local?.avatar?.trim() ?? "";
+        const fetchedAvatar = resolved.avatar?.trim() ?? "";
+        const merged =
+          isDataImageAvatar(localAvatar) && !isDataImageAvatar(fetchedAvatar)
+            ? { ...resolved, avatar: localAvatar }
+            : resolved;
+        persistUser(merged);
       } catch {
         // Ignore: admin shell already handles auth redirects.
       }
@@ -60,6 +101,33 @@ export default function AdminProfilePage() {
     return role || "-";
   }, [t, user?.role]);
 
+  const avatarPreviewUrl = useMemo(() => {
+    const raw = (editing ? form.avatar : user?.avatar)?.trim() ?? "";
+    if (!raw) return null;
+    if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("/") || raw.startsWith("data:image/")) {
+      return raw;
+    }
+    return null;
+  }, [editing, form.avatar, user?.avatar]);
+
+  const avatarInitials = useMemo(() => {
+    const first = (editing ? form.prenom : user?.prenom)?.trim() || "";
+    const last = (editing ? form.nom : user?.nom)?.trim() || "";
+    const letters = `${first} ${last}`.trim();
+    if (!letters) return "A";
+    return letters
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase() || "")
+      .slice(0, 2)
+      .join("");
+  }, [editing, form.nom, form.prenom, user?.nom, user?.prenom]);
+
+  useEffect(() => {
+    setAvatarPreviewFailed(false);
+  }, [avatarPreviewUrl]);
+
+
   const startEdit = () => {
     setForm({
       prenom: user?.prenom || "",
@@ -74,24 +142,59 @@ export default function AdminProfilePage() {
     setEditing(false);
   };
 
+  const handleAvatarFilePick = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      push({ title: t("invalidCredentials"), message: t("profile_avatar_invalid_file"), kind: "error" });
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      push({ title: t("invalidCredentials"), message: t("profile_avatar_too_large"), kind: "error" });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        push({ title: t("profile_update_failed"), message: t("profile_avatar_read_failed"), kind: "error" });
+        return;
+      }
+      setForm((prev) => ({ ...prev, avatar: result }));
+    };
+    reader.onerror = () => {
+      push({ title: t("profile_update_failed"), message: t("profile_avatar_read_failed"), kind: "error" });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleUpdateProfile = async () => {
     setSaving(true);
     try {
-      const updated = await UsersService.updateMyProfileApiV1UsersMePut({
+      const trimmedAvatar = form.avatar.trim();
+      const requestBody: UserUpdate = {
         prenom: form.prenom.trim() || null,
         nom: form.nom.trim() || null,
         telephone: form.telephone.trim() || null,
-        avatar: form.avatar.trim() || null,
-      });
+      };
+      if (!isDataImageAvatar(trimmedAvatar)) {
+        requestBody.avatar = trimmedAvatar || null;
+      }
+
+      const updated = await UsersService.updateMyProfileApiV1UsersMePut(requestBody);
       const resolved = resolveUser(updated);
       if (resolved) {
-        saveCurrentUser(resolved);
-        setUser(resolved);
+        const merged = isDataImageAvatar(trimmedAvatar) ? { ...resolved, avatar: trimmedAvatar } : resolved;
+        persistUser(merged);
       }
       setEditing(false);
       push({ title: t("profile_update_success"), kind: "success" });
-    } catch {
-      push({ title: t("profile_update_failed"), kind: "error" });
+    } catch (error) {
+      push({ title: t("profile_update_failed"), message: resolveApiErrorMessage(error), kind: "error" });
     } finally {
       setSaving(false);
     }
@@ -229,18 +332,37 @@ export default function AdminProfilePage() {
             </div>
             <div className="sm:col-span-2">
               <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{t("profile_avatar")}</p>
-              {editing ? (
-                <input
-                  value={form.avatar}
-                  onChange={(e) => setForm((prev) => ({ ...prev, avatar: e.target.value }))}
-                  className="mt-1 h-9 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm outline-none
-                             dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
-                />
-              ) : (
-                <p className="mt-1 rounded-sm border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-800 dark:border-gray-800 dark:bg-[#161b22] dark:text-gray-100">
-                  {user?.avatar || "-"}
-                </p>
-              )}
+              <div className="mt-2 flex items-center gap-3">
+                <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-green-600 text-sm font-bold text-white">
+                  {avatarPreviewUrl && !avatarPreviewFailed ? (
+                    <Image
+                      src={avatarPreviewUrl}
+                      alt={t("profile_avatar")}
+                      fill
+                      sizes="48px"
+                      unoptimized
+                      className="object-cover"
+                      onError={() => setAvatarPreviewFailed(true)}
+                    />
+                  ) : (
+                    avatarInitials
+                  )}
+                </div>
+                {editing ? (
+                  <label className="inline-flex cursor-pointer rounded-sm border border-gray-300 px-3 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-[#161b22]">
+                    {t("profile_avatar_pick_file")}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarFilePick}
+                    />
+                  </label>
+                ) : null}
+              </div>
+              {!avatarPreviewUrl ? (
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{t("profile_avatar_not_set")}</p>
+              ) : null}
             </div>
           </div>
         </section>
@@ -416,6 +538,7 @@ export default function AdminProfilePage() {
             </button>
           </form>
         </section>
+
       </div>
     </div>
   );

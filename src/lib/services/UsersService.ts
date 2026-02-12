@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { NotificationMode } from '../models/NotificationMode';
 import type { UserResponse } from '../models/UserResponse';
 import type { UserRole_Input } from '../models/UserRole_Input';
 import type { UserUpdate } from '../models/UserUpdate';
@@ -34,6 +35,26 @@ export class UsersService {
         return __request(OpenAPI, {
             method: 'PUT',
             url: '/api/v1/users/me',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Notification Settings
+     * Met a jour les modes de notification de l'utilisateur connecte
+     * @param requestBody
+     * @returns UserResponse Successful Response
+     * @throws ApiError
+     */
+    public static updateNotificationSettingsApiV1UsersMeNotificationSettingsPut(
+        requestBody: Array<NotificationMode>,
+    ): CancelablePromise<UserResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/users/me/notification-settings',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

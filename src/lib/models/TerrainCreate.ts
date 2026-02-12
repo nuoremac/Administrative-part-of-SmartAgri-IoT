@@ -6,5 +6,6 @@ export type TerrainCreate = {
     nom: string;
     description?: (string | null);
     localite_id: string;
+    superficie?: (number | null);
 };
 

@@ -2,9 +2,11 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+/**
+ * Schéma pour la création d'une parcelle (le code est généré automatiquement)
+ */
 export type ParcelleCreate = {
     nom: string;
-    code?: (string | null);
     description?: (string | null);
     terrain_id: string;
     superficie: number;
