@@ -193,22 +193,6 @@ export default function ParcelsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-              onClick={() => {
-                setIsAdding((prev) => !prev);
-                if (!isAdding) {
-                  setDraft(() => ({
-                    nom: "",
-                    superficie: "",
-                    terrain_id: normalizeId(terrains[0]?.id),
-                  }));
-                }
-              }}
-            className="rounded-sm bg-green-600 px-3 py-1 text-xs font-semibold text-white hover:bg-green-700"
-          >
-            + {t("add_parcel")}
-          </button>
           {query ? (
             <button
               type="button"
