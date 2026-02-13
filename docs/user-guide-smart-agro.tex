@@ -1,0 +1,207 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue
+}
+
+\title{Smart-Agro IoT\\User Guide}
+\author{Smart-Agro Team}
+\date{\today}
+
+% Toggle to true when screenshots are ready.
+\newif\ifshowscreenshots
+\showscreenshotsfalse
+
+% #1 file name (inside screenshots/), #2 caption text, #3 label id
+\newcommand{\guidescreenshot}[3]{
+  \begin{figure}[H]
+    \centering
+    \ifshowscreenshots
+      \includegraphics[width=0.95\textwidth]{screenshots/#1}
+    \else
+      \fbox{
+        \parbox[c][0.28\textheight][c]{0.9\textwidth}{
+          \centering
+          \textbf{Screenshot Placeholder}\\[4pt]
+          File: \texttt{screenshots/#1}\\[4pt]
+          Replace this box with the real screenshot.
+        }
+      }
+    \fi
+    \caption{#2}
+    \label{fig:#3}
+  \end{figure}
+}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Purpose}
+This guide explains how to use the Smart-Agro IoT web application from login to daily operations (fields, parcels, sensors, notifications, and profile management).
+
+\section{Audience}
+\begin{itemize}[leftmargin=1.2em]
+  \item \textbf{Administrator}: manages users and global administration.
+  \item \textbf{Operator/User}: manages operational data (fields, parcels, sensors, notifications).
+\end{itemize}
+
+\section{Prerequisites}
+\begin{itemize}[leftmargin=1.2em]
+  \item Valid account credentials.
+  \item Browser: Chrome, Firefox, Edge, or Safari (recent version).
+  \item Network access to Smart-Agro backend services.
+\end{itemize}
+
+\section{Login}
+\subsection{Goal}
+Sign in and open the admin workspace.
+\subsection{Steps}
+\begin{enumerate}[leftmargin=1.4em]
+  \item Open the login page.
+  \item Enter email and password.
+  \item Click \texttt{Sign in}.
+\end{enumerate}
+\subsection{Screenshot}
+\guidescreenshot{01-login-page.png}{Login page and credentials form}{login}
+
+\section{Dashboard}
+\subsection{Goal}
+View high-level KPIs and system overview.
+\subsection{Screenshot}
+\guidescreenshot{02-dashboard.png}{Main dashboard with key metrics and quick overview}{dashboard}
+
+\section{Users Management (Admin)}
+\subsection{Goal}
+Create, edit, and monitor user accounts.
+\subsection{Key actions}
+\begin{itemize}[leftmargin=1.2em]
+  \item List users
+  \item Add user
+  \item Edit user details
+  \item Delete/disable user
+\end{itemize}
+\subsection{Screenshot}
+\guidescreenshot{03-users-page.png}{Users page with list and actions}{users}
+
+\section{Fields/Terrains Management}
+\subsection{Goal}
+Manage agricultural fields (terrain records).
+\subsection{Key actions}
+\begin{itemize}[leftmargin=1.2em]
+  \item Create terrain
+  \item Edit terrain metadata
+  \item Open terrain details
+\end{itemize}
+\subsection{Screenshot}
+\guidescreenshot{04-terrains-page.png}{Terrains page with table and management actions}{terrains}
+
+\section{Parcels Management}
+\subsection{Goal}
+Manage parcels linked to terrains.
+\subsection{Key actions}
+\begin{itemize}[leftmargin=1.2em]
+  \item Browse parcels
+  \item Open parcel details
+  \item Review linked field name and area
+\end{itemize}
+\subsection{Screenshot}
+\guidescreenshot{05-parcels-page.png}{Parcels list showing parcel and field information}{parcels}
+
+\section{Sensors Management}
+\subsection{Goal}
+Register and monitor IoT sensors.
+\subsection{Key actions}
+\begin{itemize}[leftmargin=1.2em]
+  \item Create sensor
+  \item View sensor details
+  \item Check code / device ID and status
+\end{itemize}
+\subsection{Screenshot}
+\guidescreenshot{06-sensors-page.png}{Sensors page with sensor records and actions}{sensors}
+
+\section{Notifications}
+\subsection{Goal}
+Configure channels and validate notification behavior.
+\subsection{Key actions}
+\begin{itemize}[leftmargin=1.2em]
+  \item Select notification channels
+  \item Save notification settings
+  \item Send test notification
+\end{itemize}
+\subsection{Screenshot}
+\guidescreenshot{07-notifications-page.png}{Notifications page with channel settings and test action}{notifications}
+
+\section{Profile}
+\subsection{Goal}
+Update personal profile and security settings.
+\subsection{Key actions}
+\begin{itemize}[leftmargin=1.2em]
+  \item Edit profile data
+  \item Upload avatar image
+  \item Change password
+\end{itemize}
+\subsection{Screenshot}
+\guidescreenshot{08-profile-page.png}{Profile page with avatar, account fields, and password update}{profile}
+
+\section{Language and Theme}
+\subsection{Goal}
+Switch application language and dark/light theme.
+\subsection{Screenshot}
+\guidescreenshot{09-theme-language.png}{Theme and language controls in the admin interface}{theme-language}
+
+\section{Logout}
+\subsection{Goal}
+Safely end the session.
+\subsection{Steps}
+\begin{enumerate}[leftmargin=1.4em]
+  \item Click \texttt{Logout} from the sidebar.
+  \item Confirm if prompted.
+\end{enumerate}
+\subsection{Screenshot}
+\guidescreenshot{10-logout.png}{Logout action from sidebar navigation}{logout}
+
+\section{Troubleshooting}
+\begin{itemize}[leftmargin=1.2em]
+  \item \textbf{Failed to load data}: verify backend availability and user permissions.
+  \item \textbf{Unauthorized (401/403)}: sign out and sign in again.
+  \item \textbf{Image upload issues}: use JPG/PNG/WebP and reduce file size if needed.
+\end{itemize}
+
+\section{Screenshot Checklist}
+\begin{enumerate}[leftmargin=1.4em]
+  \item \texttt{screenshots/01-login-page.png}
+  \item \texttt{screenshots/02-dashboard.png}
+  \item \texttt{screenshots/03-users-page.png}
+  \item \texttt{screenshots/04-terrains-page.png}
+  \item \texttt{screenshots/05-parcels-page.png}
+  \item \texttt{screenshots/06-sensors-page.png}
+  \item \texttt{screenshots/07-notifications-page.png}
+  \item \texttt{screenshots/08-profile-page.png}
+  \item \texttt{screenshots/09-theme-language.png}
+  \item \texttt{screenshots/10-logout.png}
+\end{enumerate}
+
+\section{Build PDF}
+\begin{verbatim}
+cd docs
+pdflatex user-guide-smart-agro.tex
+pdflatex user-guide-smart-agro.tex
+\end{verbatim}
+
+\end{document}

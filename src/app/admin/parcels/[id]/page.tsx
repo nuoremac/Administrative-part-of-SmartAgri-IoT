@@ -9,15 +9,12 @@ import { useT } from "@/components/i18n/useT";
 import { useLang } from "@/components/i18n/LangProvider";
 import type { Capteur } from "@/lib/models/Capteur";
 import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
-import type { RecommendationResponse } from "@/lib/models/RecommendationResponse";
 import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
 import type { TerrainResponse } from "@/lib/models/TerrainResponse";
-import type { UnifiedRecommendationResponse } from "@/lib/models/UnifiedRecommendationResponse";
 import { fetchAllParcels, fetchTerrains } from "@/lib/apiData";
 import { CapteursService } from "@/lib/services/CapteursService";
 import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
 import { ParcellesService } from "@/lib/services/ParcellesService";
-import { RecommandationsService } from "@/lib/services/RecommandationsService";
 import { TerrainsService } from "@/lib/services/TerrainsService";
 import { unwrapData, unwrapList } from "@/lib/apiHelpers";
 import {
@@ -39,9 +36,6 @@ type Sensor = {
   lastSeen: string; // ISO
   status: "ok" | "warning" | "offline";
 };
-const HISTORY_PAGE_SIZE = 5;
-const HISTORY_REQUEST_LIMIT = HISTORY_PAGE_SIZE + 1;
-
 
 export default function ParcelDetailsPage() {
   const params = useParams();
@@ -67,15 +61,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
   const [range, setRange] = useState<"24h" | "7d">("24h");
   const [showCharts, setShowCharts] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [recommendation, setRecommendation] = useState<UnifiedRecommendationResponse | null>(null);
-  const [recommendationHistory, setRecommendationHistory] = useState<RecommendationResponse[]>([]);
-  const [loadingRecommendationHistory, setLoadingRecommendationHistory] = useState(false);
-  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
-  const [historyHasNextPage, setHistoryHasNextPage] = useState(false);
-  const [historyPriority, setHistoryPriority] = useState("all");
-  const [historyDateRange, setHistoryDateRange] = useState<"all" | "7d" | "30d" | "90d">("all");
-  const [historyPage, setHistoryPage] = useState(1);
-  const [isGeneratingRecommendation, setIsGeneratingRecommendation] = useState(false);
 
   useEffect(() => {
     pushRef.current = push;
@@ -195,57 +180,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
     return () => clearTimeout(id);
   }, []);
 
-  useEffect(() => {
-    let canceled = false;
-    const loadRecommendationHistory = async () => {
-      if (!parcel) {
-        if (!canceled) {
-          setRecommendationHistory([]);
-          setHistoryHasNextPage(false);
-        }
-        return;
-      }
-
-      setLoadingRecommendationHistory(true);
-      try {
-        const skip = (historyPage - 1) * HISTORY_PAGE_SIZE;
-        const priorite = historyPriority !== "all" ? historyPriority : undefined;
-        const payload = await RecommandationsService.getRecommendationsByParcelleApiV1RecommendationsParcelleParcelleIdGet(
-          parcel.id,
-          skip,
-          HISTORY_REQUEST_LIMIT,
-          priorite
-        );
-        const list = unwrapList<RecommendationResponse>(payload)
-          .sort(
-          (a, b) =>
-            new Date(getRecommendationTimestamp(b)).getTime() -
-            new Date(getRecommendationTimestamp(a)).getTime()
-        );
-        const hasNext = list.length > HISTORY_PAGE_SIZE;
-        const pageSlice = hasNext ? list.slice(0, HISTORY_PAGE_SIZE) : list;
-        if (canceled) return;
-        setRecommendationHistory(pageSlice);
-        setHistoryHasNextPage(hasNext);
-      } catch {
-        if (!canceled) {
-          setRecommendationHistory([]);
-          setHistoryHasNextPage(false);
-        }
-      } finally {
-        if (!canceled) setLoadingRecommendationHistory(false);
-      }
-    };
-    void loadRecommendationHistory();
-    return () => {
-      canceled = true;
-    };
-  }, [parcel, historyPage, historyPriority, historyRefreshKey]);
-
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [historyPriority, historyDateRange, parcel?.id]);
-
   const metricsData = useMemo(() => {
     if (!measurements.length) return [];
     return measurements
@@ -330,51 +264,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
     }
   };
 
-  const handleGenerateRecommendation = async () => {
-    if (!parcel || isGeneratingRecommendation) return;
-    setIsGeneratingRecommendation(true);
-    try {
-      const payload = await RecommandationsService.predictParcelleCropApiV1RecommendationsParcelleParcelleIdPredictCropPost(
-        parcel.id
-      );
-      const generated = unwrapData<UnifiedRecommendationResponse>(payload);
-      setRecommendation(generated);
-      push({
-        title: t("dashboard_recommendations"),
-        message: generated.recommended_crop,
-        kind: "success",
-      });
-      setHistoryRefreshKey((k) => k + 1);
-    } catch {
-      push({ title: t("load_failed"), kind: "error" });
-    } finally {
-      setIsGeneratingRecommendation(false);
-    }
-  };
-
-  const availablePriorities = useMemo(() => {
-    const values = new Set(
-      recommendationHistory
-        .map((entry) => getRecommendationPriority(entry))
-        .filter((priority): priority is string => !!priority)
-    );
-    if (historyPriority !== "all") values.add(historyPriority);
-    return Array.from(values);
-  }, [recommendationHistory, historyPriority]);
-
-  const filteredRecommendationHistory = useMemo(() => {
-    let list = recommendationHistory;
-    if (historyDateRange !== "all") {
-      const days = historyDateRange === "7d" ? 7 : historyDateRange === "30d" ? 30 : 90;
-      const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-      list = list.filter((entry) => {
-        const ts = new Date(getRecommendationTimestamp(entry)).getTime();
-        return Number.isFinite(ts) && ts >= cutoff;
-      });
-    }
-    return list;
-  }, [recommendationHistory, historyDateRange]);
-
   if (!id) {
     return <ParcelDetailsSkeleton />;
   }
@@ -401,10 +290,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
   if (!parcel) {
     return <ParcelDetailsSkeleton />;
   }
-
-  const confidenceScore = recommendation
-    ? `${Math.round((recommendation.confidence_score <= 1 ? recommendation.confidence_score * 100 : recommendation.confidence_score) * 10) / 10}%`
-    : "—";
 
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
@@ -484,14 +369,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
             </svg>
             <span className="sr-only">{t("delete")}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => void handleGenerateRecommendation()}
-            className="h-9 rounded-sm bg-green-600 px-3 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
-            disabled={isGeneratingRecommendation}
-          >
-            {isGeneratingRecommendation ? t("checking") : t("generate_recommendation")}
-          </button>
         </div>
       </div>
 
@@ -530,147 +407,40 @@ function ParcelDetailsInner({ id }: { id: string }) {
           )}
         </div>
 
-        <div className="rounded-sm border border-gray-300 bg-white p-4 dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-3">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("dashboard_recommendations")}</p>
-          {recommendation ? (
-            <>
-              <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-700 dark:text-gray-300 sm:grid-cols-3">
-                <Row label={t("table_current_crop")} value={recommendation.recommended_crop} />
-                <Row label={t("recommendation_confidence")} value={confidenceScore} />
-                <Row label={t("parcel_last_update")} value={formatLastUpdate(recommendation.generated_at)} />
-              </div>
-              <div className="mt-3 rounded-sm border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-300">
-                <span className="font-semibold">{t("recommendation_justification")}:</span> {recommendation.justification}
-              </div>
-            </>
-          ) : (
-            <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">{t("dashboard_no_recommendations")}</p>
-          )}
+        <div className="rounded-sm border border-gray-300 bg-white dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-3">
+          <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("attached_sensors")}</p>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("parcel_sensors_subtitle")}</p>
+          </div>
 
-          <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-800">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-              {t("recommendation_history_title")}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">
-                {t("recommendation_filter_priority")}
-              </label>
-              <select
-                value={historyPriority}
-                onChange={(e) => setHistoryPriority(e.target.value)}
-                className="h-8 rounded-sm border border-gray-300 bg-white px-2 text-xs outline-none dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
-              >
-                <option value="all">{t("recommendation_filter_all")}</option>
-                {availablePriorities.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {formatPriorityLabel(priority)}
-                  </option>
+          <div className="overflow-x-auto">
+            <table className="min-w-[780px] w-full text-left text-sm">
+              <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
+                <tr className="border-b border-gray-200 dark:border-gray-800">
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_name")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_code")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_last_activity")}</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_status")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sensorsList.map((s, idx) => (
+                  <tr
+                    key={s.id ?? s.code ?? `sensor-${idx}`}
+                    className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
+                  >
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.name}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.code || s.devEui || "—"}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{formatAgo(s.lastSeen, lang)}</td>
+                    <td className="px-4 py-3">
+                      <SensorBadge status={s.status} t={t} />
+                    </td>
+                  </tr>
                 ))}
-              </select>
-
-              <label className="ml-2 text-[11px] font-semibold text-gray-600 dark:text-gray-400">
-                {t("recommendation_filter_date")}
-              </label>
-              <select
-                value={historyDateRange}
-                onChange={(e) => setHistoryDateRange(e.target.value as "all" | "7d" | "30d" | "90d")}
-                className="h-8 rounded-sm border border-gray-300 bg-white px-2 text-xs outline-none dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-100"
-              >
-                <option value="all">{t("recommendation_filter_all")}</option>
-                <option value="7d">{t("recommendation_date_7d")}</option>
-                <option value="30d">{t("recommendation_date_30d")}</option>
-                <option value="90d">{t("recommendation_date_90d")}</option>
-              </select>
-            </div>
-            {loadingRecommendationHistory ? (
-              <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">{t("loading")}</p>
-            ) : filteredRecommendationHistory.length === 0 ? (
-              <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">{t("dashboard_no_recommendations")}</p>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {filteredRecommendationHistory.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="rounded-sm border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-[#161b22] dark:text-gray-300"
-                  >
-                    <p className="font-semibold text-gray-900 dark:text-gray-100">{entry.titre}</p>
-                    <p className="mt-1">{entry.description}</p>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                        {formatLastUpdate(getRecommendationTimestamp(entry))}
-                      </span>
-                      <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-700 dark:bg-gray-700 dark:text-gray-200">
-                        {formatPriorityLabel(getRecommendationPriority(entry) ?? t("recommendation_priority_unknown"))}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!loadingRecommendationHistory && filteredRecommendationHistory.length > 0 ? (
-              <div className="mt-3 flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
-                <span>
-                  {t("pagination_page")} <span className="font-semibold">{historyPage}</span>
-                  {historyHasNextPage ? "+" : ""} •{" "}
-                  <span className="font-semibold">{filteredRecommendationHistory.length}</span> {t("pagination_results")}
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setHistoryPage((prev) => Math.max(1, prev - 1))}
-                    className="rounded-sm border border-gray-300 px-2 py-1 text-xs font-semibold hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-[#161b22]"
-                    disabled={historyPage === 1}
-                  >
-                    Prev
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setHistoryPage((prev) => prev + 1)}
-                    className="rounded-sm border border-gray-300 px-2 py-1 text-xs font-semibold hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-[#161b22]"
-                    disabled={!historyHasNextPage}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            ) : null}
+              </tbody>
+            </table>
           </div>
         </div>
-
-	        <div className="rounded-sm border border-gray-300 bg-white dark:border-gray-800 dark:bg-[#0d1117] lg:col-span-3">
-	          <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-	            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("attached_sensors")}</p>
-	            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("parcel_sensors_subtitle")}</p>
-	          </div>
-
-	          <div className="overflow-x-auto">
-	            <table className="min-w-[780px] w-full text-left text-sm">
-	              <thead className="sticky top-0 bg-gray-50 dark:bg-[#161b22]">
-	                <tr className="border-b border-gray-200 dark:border-gray-800">
-	                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_name")}</th>
-	                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_code")}</th>
-	                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_last_activity")}</th>
-	                  <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_status")}</th>
-	                </tr>
-	              </thead>
-	              <tbody>
-	                {sensorsList.map((s, idx) => (
-	                  <tr
-	                    key={s.id ?? s.code ?? `sensor-${idx}`}
-	                    className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-[#0b1220]"
-	                  >
-	                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.name}</td>
-	                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.code || s.devEui || "—"}</td>
-	                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{formatAgo(s.lastSeen, lang)}</td>
-	                    <td className="px-4 py-3">
-	                      <SensorBadge status={s.status} t={t} />
-	                    </td>
-	                  </tr>
-	                ))}
-	              </tbody>
-	            </table>
-	          </div>
-	        </div>
       </div>
 
       <EditParcelModal
@@ -760,24 +530,6 @@ function statusLabel(level: "ok" | "warning" | "offline", t: (k: string) => stri
   if (level === "ok") return t("status_ok");
   if (level === "warning") return t("status_warning");
   return t("status_offline");
-}
-
-function getRecommendationTimestamp(entry: RecommendationResponse) {
-  return entry.date_creation || entry.created_at || entry.updated_at || new Date(0).toISOString();
-}
-
-function getRecommendationPriority(entry: RecommendationResponse): string | null {
-  const withPriority = entry as RecommendationResponse & { priorite?: unknown; priority?: unknown };
-  const raw = withPriority.priorite ?? withPriority.priority;
-  if (typeof raw !== "string") return null;
-  const value = raw.trim();
-  return value || null;
-}
-
-function formatPriorityLabel(value: string) {
-  const normalized = value.replace(/[_-]+/g, " ").trim();
-  if (!normalized) return "—";
-  return normalized.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function formatLastUpdate(iso: string) {

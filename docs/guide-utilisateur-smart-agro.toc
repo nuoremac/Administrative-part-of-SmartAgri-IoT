@@ -1,0 +1,24 @@
+\babel@toc {nil}{}\relax 
+\contentsline {section}{\numberline {1}Objet du document}{2}{section.1}%
+\contentsline {section}{\numberline {2}Périmètre fonctionnel}{2}{section.2}%
+\contentsline {section}{\numberline {3}Public visé}{2}{section.3}%
+\contentsline {section}{\numberline {4}Prérequis}{2}{section.4}%
+\contentsline {section}{\numberline {5}Conventions de lecture}{2}{section.5}%
+\contentsline {section}{\numberline {6}Parcours d'utilisation}{2}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Connexion}{2}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Tableau de bord}{3}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Gestion des utilisateurs (profil administrateur)}{3}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Gestion des terrains}{4}{subsection.6.4}%
+\contentsline {subsection}{\numberline {6.5}Gestion des parcelles}{4}{subsection.6.5}%
+\contentsline {subsection}{\numberline {6.6}Gestion des capteurs}{5}{subsection.6.6}%
+\contentsline {subsection}{\numberline {6.7}Notifications}{5}{subsection.6.7}%
+\contentsline {subsection}{\numberline {6.8}Profil utilisateur}{6}{subsection.6.8}%
+\contentsline {subsection}{\numberline {6.9}Langue et thème}{6}{subsection.6.9}%
+\contentsline {subsection}{\numberline {6.10}Déconnexion}{7}{subsection.6.10}%
+\contentsline {section}{\numberline {7}Gestion des incidents courants}{7}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Échec de chargement des données}{7}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Erreur d'autorisation (401/403)}{8}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Échec d'upload d'avatar}{8}{subsection.7.3}%
+\contentsline {section}{\numberline {8}Liste des captures attendues}{8}{section.8}%
+\contentsline {section}{\numberline {9}Historique des versions}{8}{section.9}%
+\contentsline {section}{\numberline {10}Compilation PDF}{8}{section.10}%

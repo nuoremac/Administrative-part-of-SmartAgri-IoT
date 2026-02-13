@@ -88,15 +88,6 @@ function IconProfile() {
   return <span className="text-sm">👤</span>;
 }
 
-function IconNotifications() {
-  return (
-    <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M15 18h5l-1.4-1.4A2 2 0 0 1 18 15.2V11a6 6 0 1 0-12 0v4.2a2 2 0 0 1-.6 1.4L4 18h5" />
-      <path d="M10 18a2 2 0 0 0 4 0" />
-    </svg>
-  );
-}
-
 // Nouvelles icônes pour le thème
 function IconSun() {
   return (
@@ -247,7 +238,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       { href: "/admin/terrains", label: t("nav_terrains"), icon: <IconTerrains /> },
       { href: "/admin/parcels", label: t("nav_parcels"), icon: <IconParcels /> },
       { href: "/admin/sensors", label: t("nav_sensors"), icon: <IconSensors /> },
-      { href: "/admin/notifications", label: t("nav_notifications"), icon: <IconNotifications /> },
       { href: "/admin/profile", label: t("nav_profile"), icon: <IconProfile /> },
     ],
     [t]

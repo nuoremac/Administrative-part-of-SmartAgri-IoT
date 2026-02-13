@@ -5,16 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useT } from "@/components/i18n/useT";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import type { Capteur } from "@/lib/models/Capteur";
-import type { LocaliteResponse } from "@/lib/models/LocaliteResponse";
 import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
-import type { RecommendationResponse } from "@/lib/models/RecommendationResponse";
 import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
 import type { TerrainResponse } from "@/lib/models/TerrainResponse";
 import type { UserResponse } from "@/lib/models/UserResponse";
-import { fetchAllMeasurements, fetchAllParcels, fetchLocalites, fetchSensors, fetchTerrains, fetchUsers } from "@/lib/apiData";
+import { fetchAllMeasurements, fetchAllParcels, fetchSensors, fetchTerrains, fetchUsers } from "@/lib/apiData";
 import { AdministrationService } from "@/lib/services/AdministrationService";
 import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
-import { RecommandationsService } from "@/lib/services/RecommandationsService";
 import { unwrapList } from "@/lib/apiHelpers";
 
 type AlertLevel = "critical" | "warning" | "info";
@@ -28,14 +25,6 @@ type Alert = {
   parcelCode?: string;
 };
 
-type Recommendation = {
-  id: string;
-  title: string;
-  parcel: string;
-  time: string;
-  parcelCode?: string;
-};
-
 export default function AdminDashboardPage() {
   const { t } = useT();
   const { query } = useAdminSearch();
@@ -45,8 +34,6 @@ export default function AdminDashboardPage() {
   const [terrains, setTerrains] = useState<TerrainResponse[]>([]);
   const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
   const [sensors, setSensors] = useState<Capteur[]>([]);
-  const [localites, setLocalites] = useState<LocaliteResponse[]>([]);
-  const [recommendations, setRecommendations] = useState<RecommendationResponse[]>([]);
   const [measurements, setMeasurements] = useState<SensorMeasurementsResponse[]>([]);
   const [selectedParcelId, setSelectedParcelId] = useState<string>("");
   const [parcelMeasurements, setParcelMeasurements] = useState<SensorMeasurementsResponse[]>([]);
@@ -70,33 +57,27 @@ export default function AdminDashboardPage() {
         } catch {
           dashboardStats = null;
         }
-        const [userList, terrainList, sensorList, localiteList] = await Promise.all([
+        const [userList, terrainList, sensorList] = await Promise.all([
           fetchUsers(),
           fetchTerrains(),
           fetchSensors(),
-          fetchLocalites(),
         ]);
         const parcelList = await fetchAllParcels(terrainList);
         const measurementList = await fetchAllMeasurements(200);
-        const recommendationPayload = await RecommandationsService.getAllRecommendationsApiV1RecommendationsGet(undefined, 50);
         if (canceled) return;
         setUsers(userList);
         setTerrains(terrainList);
         setSensors(sensorList);
-        setLocalites(localiteList);
         setParcels(parcelList);
         setMeasurements(measurementList);
-        setRecommendations(unwrapList<RecommendationResponse>(recommendationPayload));
         setAdminStats(dashboardStats);
       } catch {
         if (!canceled) {
           setUsers([]);
           setTerrains([]);
           setSensors([]);
-          setLocalites([]);
           setParcels([]);
           setMeasurements([]);
-          setRecommendations([]);
           setAdminStats(null);
         }
       } finally {
@@ -206,22 +187,6 @@ export default function AdminDashboardPage() {
     });
   }, [measurements, parcelMap, sensorMap]);
 
-  const localiteCoverage = useMemo(() => {
-    const countByLocalite = terrains.reduce((acc, terrain) => {
-      acc.set(terrain.localite_id, (acc.get(terrain.localite_id) ?? 0) + 1);
-      return acc;
-    }, new Map<string, number>());
-    return localites
-      .map((localite) => ({
-        id: localite.id,
-        name: localite.ville || localite.nom,
-        climate: localite.climate_zone ?? "—",
-        terrains: countByLocalite.get(localite.id) ?? 0,
-      }))
-      .sort((a, b) => b.terrains - a.terrains)
-      .slice(0, 3);
-  }, [localites, terrains]);
-
   const alerts: Alert[] = useMemo(() => {
     const sorted = measurements
       .slice()
@@ -252,66 +217,12 @@ export default function AdminDashboardPage() {
     return alertsList;
   }, [measurements, parcelMap, t]);
 
-  const sensorStatus = useMemo(() => {
-    const latestBySensor = new Map<string, SensorMeasurementsResponse>();
-    for (const m of measurements) {
-      const prev = latestBySensor.get(m.capteur_id);
-      if (!prev || new Date(m.timestamp).getTime() > new Date(prev.timestamp).getTime()) {
-        latestBySensor.set(m.capteur_id, m);
-      }
-    }
-
-    const now = Date.now();
-    let online = 0;
-    let offline = 0;
-    latestBySensor.forEach((m) => {
-      const ageMs = now - new Date(m.timestamp).getTime();
-      if (ageMs <= 24 * 60 * 60 * 1000) {
-        online += 1;
-      } else {
-        offline += 1;
-      }
-    });
-
-    const lastIngest = measurements.length
-      ? measurements.slice().sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0].timestamp
-      : null;
-
-    return {
-      online,
-      offline,
-      total: sensors.length,
-      lastIngest,
-    };
-  }, [measurements, sensors.length]);
-
-  const recs: Recommendation[] = useMemo(() => {
-    return recommendations.slice(0, 4).map((r) => {
-      const parcel = parcelMap.get(String(r.parcelle_id));
-      const parcelLabel = parcel ? `${parcel.code ?? "—"} — ${parcel.nom}` : String(r.parcelle_id);
-      return {
-        id: String(r.id),
-        title: r.titre,
-        parcel: parcelLabel,
-        time: formatAgo(r.date_creation),
-        parcelCode: parcel?.code ?? undefined,
-      };
-    });
-  }, [recommendations, parcelMap]);
-
   const filteredAlerts = useMemo(() => {
     if (!search) return alerts;
     return alerts.filter(
       (a) => a.title.toLowerCase().includes(search) || (a.parcelCode ?? "").toLowerCase().includes(search)
     );
   }, [alerts, search]);
-
-  const filteredRecommendations = useMemo(() => {
-    if (!search) return recs;
-    return recs.filter(
-      (r) => r.title.toLowerCase().includes(search) || (r.parcelCode ?? "").toLowerCase().includes(search)
-    );
-  }, [recs, search]);
 
   const trendSize = range === "24h" ? 6 : range === "7d" ? 9 : 12;
   const trendBase = parcelMeasurements
@@ -336,23 +247,10 @@ export default function AdminDashboardPage() {
         time: formatAgo(m.timestamp),
         ts: new Date(m.timestamp).getTime(),
       }));
-
-    const recommendationEvents = recommendations
-      .slice()
-      .sort((a, b) => new Date(b.date_creation).getTime() - new Date(a.date_creation).getTime())
-      .slice(0, 2)
-      .map((r) => ({
-        id: `r-${r.id}`,
-        title: t("dashboard_timeline_alert"),
-        meta: r.titre,
-        time: formatAgo(r.date_creation),
-        ts: new Date(r.date_creation).getTime(),
-      }));
-
-    return [...measurementEvents, ...recommendationEvents]
+    return [...measurementEvents]
       .sort((a, b) => b.ts - a.ts)
       .slice(0, 4);
-  }, [measurements, recommendations, parcelMap, t]);
+  }, [measurements, parcelMap, t]);
 
   return (
     <div className="space-y-4">
@@ -523,25 +421,6 @@ export default function AdminDashboardPage() {
             </div>
           </Card>
 
-          <Card title={t("dashboard_recommendations")}>
-            <div className="space-y-2">
-              {filteredRecommendations.length === 0 ? (
-                <EmptyState text={t("dashboard_no_recommendations")} />
-              ) : (
-                filteredRecommendations.map((r) => (
-                  <div key={r.id} className="rounded-sm border border-gray-200 p-2 dark:border-gray-800 dark:bg-[#0d1117]">
-                    <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{r.title}</p>
-                    <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
-                      <span>{r.parcel}</span>
-                      <span>{r.time}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-
-          
         </div>
       </section>
     </div>
@@ -595,15 +474,6 @@ function Kpi({
         <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{label}</p>
         <p className="text-[11px] text-gray-500 dark:text-gray-400">{meta}</p>
       </div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-sm border border-gray-200 bg-gray-50 px-2 py-2 dark:border-gray-800 dark:bg-[#161b22]">
-      <p className="text-[11px] text-gray-600 dark:text-gray-400">{label}</p>
-      <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{value}</p>
     </div>
   );
 }

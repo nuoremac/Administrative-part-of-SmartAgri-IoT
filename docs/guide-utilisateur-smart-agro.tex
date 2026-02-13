@@ -1,0 +1,188 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[french]{babel}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{array}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue
+}
+
+\title{Smart-Agro IoT\\Guide d'utilisation}
+\author{Équipe projet Smart-Agro}
+\date{\today}
+
+% Mettre à true lorsque les captures sont disponibles.
+\newif\ifaffichercaptures
+\affichercapturesfalse
+
+% #1: nom du fichier dans screenshots/
+% #2: légende
+% #3: identifiant du label
+\newcommand{\captureguide}[3]{
+  \begin{figure}[H]
+    \centering
+    \ifaffichercaptures
+      \includegraphics[width=0.95\textwidth]{screenshots/#1}
+    \else
+      \fbox{
+        \parbox[c][0.26\textheight][c]{0.90\textwidth}{
+          \centering
+          \textbf{Capture à insérer}\\[4pt]
+          Fichier attendu : \texttt{screenshots/#1}
+        }
+      }
+    \fi
+    \caption{#2}
+    \label{fig:#3}
+  \end{figure}
+}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Objet du document}
+Le présent guide a pour objectif d'accompagner l'utilisateur dans la prise en main de la plateforme Smart-Agro IoT. Il décrit, de manière progressive, les opérations courantes réalisées depuis l'interface web : authentification, consultation des données, gestion des entités métier et administration des préférences du compte.
+
+Ce document est destiné à servir de référence opérationnelle. Il peut être utilisé à la fois comme support d'apprentissage initial et comme aide rapide lors de l'exploitation quotidienne de l'application.
+
+\section{Périmètre fonctionnel}
+Le guide couvre les modules actuellement disponibles dans le périmètre administrateur : tableau de bord, gestion des utilisateurs, gestion des terrains, parcelles et capteurs, notifications, profil et déconnexion.
+
+Les fonctionnalités très techniques (maintenance système, opérations internes backend, etc.) ne font pas partie du périmètre de ce document.
+
+\section{Public visé}
+Cette documentation s'adresse à deux profils principaux :
+\begin{itemize}[leftmargin=1.2em]
+  \item \textbf{Administrateur} : il supervise les comptes et pilote les opérations de gestion globale.
+  \item \textbf{Utilisateur métier} : il exploite les fonctionnalités liées aux terrains, parcelles, capteurs et notifications.
+\end{itemize}
+
+\section{Prérequis}
+Avant d'utiliser l'application, il est nécessaire de disposer d'un compte actif, d'un navigateur récent et d'un accès réseau au service Smart-Agro.
+
+Pour garantir une utilisation fluide, il est recommandé d'utiliser une connexion stable et de vérifier les droits associés au profil connecté.
+
+\section{Conventions de lecture}
+Dans ce guide, les actions utilisateur sont décrites dans l'ordre d'exécution réel. Les libellés de boutons et de menus apparaissent en \texttt{monospace} (exemple : \texttt{Save}, \texttt{Logout}) pour faciliter leur identification dans l'interface.
+
+Les captures d'écran sont référencées dans le dossier \texttt{docs/screenshots/}. Tant que les images finales ne sont pas disponibles, des emplacements sont affichés automatiquement dans le PDF.
+
+\section{Parcours d'utilisation}
+
+\subsection{Connexion}
+La connexion constitue le point d'entrée de la plateforme. L'utilisateur ouvre la page d'authentification, saisit son email et son mot de passe, puis valide via le bouton \texttt{Sign in}. Si les informations sont correctes et que le compte est autorisé, la session est ouverte et l'accès au tableau de bord est immédiat.
+
+En cas d'échec, il convient de vérifier les identifiants saisis ainsi que le statut du compte.
+\captureguide{01-login-page.png}{Écran de connexion}{connexion}
+
+\subsection{Tableau de bord}
+Le tableau de bord fournit une vue synthétique de l'état de la plateforme. Il permet d'identifier rapidement les indicateurs clés et de confirmer que les données principales sont disponibles.
+
+Cette page est généralement la première étape de vérification après la connexion, avant de naviguer vers les modules de gestion détaillée.
+\captureguide{02-dashboard.png}{Tableau de bord Smart-Agro}{tableau-de-bord}
+
+\subsection{Gestion des utilisateurs (profil administrateur)}
+Le module \texttt{Users} est réservé à l'administration des comptes. L'administrateur peut consulter la liste des utilisateurs, créer de nouveaux comptes, mettre à jour les informations existantes et supprimer ou désactiver les accès selon les besoins.
+
+Après chaque action de création ou de modification, il est recommandé de contrôler la cohérence des informations affichées dans la liste.
+\captureguide{03-users-page.png}{Gestion des utilisateurs}{utilisateurs}
+
+\subsection{Gestion des terrains}
+La page \texttt{Terrains} centralise les opérations liées aux terrains agricoles. L'utilisateur peut y créer un nouveau terrain, compléter ses métadonnées et accéder à sa fiche de détail.
+
+Cette étape est structurante, car les parcelles sont rattachées aux terrains existants. Une bonne qualité de saisie à ce niveau facilite l'ensemble des traitements aval.
+\captureguide{04-terrains-page.png}{Gestion des terrains}{terrains}
+
+\subsection{Gestion des parcelles}
+Le module \texttt{Parcels} permet de consulter les parcelles enregistrées et leurs associations métiers. L'utilisateur peut rechercher une parcelle, ouvrir sa fiche et vérifier les informations clés, notamment le terrain parent et la superficie.
+
+La consultation régulière de ce module permet d'assurer l'alignement entre les données terrain et les données de suivi opérationnel.
+\captureguide{05-parcels-page.png}{Liste des parcelles}{parcelles}
+
+\subsection{Gestion des capteurs}
+La page \texttt{Sensors} est dédiée à l'intégration des capteurs IoT et au suivi de leur état. L'utilisateur peut créer un capteur, consulter ses caractéristiques techniques et valider les identifiants nécessaires à l'exploitation (code, identifiant appareil, état).
+
+Une vérification systématique des informations techniques après création est conseillée pour éviter les erreurs de collecte.
+\captureguide{06-sensors-page.png}{Gestion des capteurs}{capteurs}
+
+\subsection{Notifications}
+Le module \texttt{Notifications} sert à définir les canaux de notification autorisés et à valider leur fonctionnement via un test d'envoi.
+
+Le flux recommandé consiste à sélectionner les canaux, enregistrer les paramètres, puis exécuter un test afin de confirmer le bon acheminement des messages.
+\captureguide{07-notifications-page.png}{Paramétrage des notifications}{notifications}
+
+\subsection{Profil utilisateur}
+Depuis le menu \texttt{Profile}, l'utilisateur met à jour ses informations personnelles (identité, téléphone, avatar) et gère la sécurité de son compte via la modification du mot de passe.
+
+Après sauvegarde, les changements doivent être visibles immédiatement dans les zones d'affichage du profil et de la barre latérale.
+\captureguide{08-profile-page.png}{Gestion du profil utilisateur}{profil}
+
+\subsection{Langue et thème}
+L'application propose des options d'affichage permettant d'adapter l'interface aux préférences de l'utilisateur : choix de la langue et bascule entre les thèmes clair et sombre.
+
+Ces paramètres améliorent le confort d'utilisation sans modifier le contenu métier.
+\captureguide{09-theme-language.png}{Réglages de langue et thème}{langue-theme}
+
+\subsection{Déconnexion}
+La déconnexion clôture la session de travail. L'action se fait depuis la barre latérale via \texttt{Logout}. Une fois exécutée, l'utilisateur est redirigé vers la page de connexion et la session active est invalidée.
+
+Cette étape doit être systématiquement réalisée en fin d'utilisation, en particulier sur un poste partagé.
+\captureguide{10-logout.png}{Déconnexion de l'application}{deconnexion}
+
+\section{Gestion des incidents courants}
+\subsection{Échec de chargement des données}
+En cas de message d'erreur de chargement, vérifier d'abord la connectivité réseau puis la disponibilité du backend Smart-Agro. Si l'incident persiste, contrôler les droits du compte connecté.
+
+\subsection{Erreur d'autorisation (401/403)}
+Ce type d'erreur indique généralement une session expirée ou un niveau de permission insuffisant. Il est recommandé de se déconnecter, puis de se reconnecter avec un compte disposant des droits requis.
+
+\subsection{Échec d'upload d'avatar}
+Vérifier le format du fichier image (JPG/PNG/WebP) et réduire sa taille si nécessaire avant de relancer l'opération.
+
+\section{Liste des captures attendues}
+\begin{enumerate}[leftmargin=1.4em]
+  \item \texttt{screenshots/01-login-page.png}
+  \item \texttt{screenshots/02-dashboard.png}
+  \item \texttt{screenshots/03-users-page.png}
+  \item \texttt{screenshots/04-terrains-page.png}
+  \item \texttt{screenshots/05-parcels-page.png}
+  \item \texttt{screenshots/06-sensors-page.png}
+  \item \texttt{screenshots/07-notifications-page.png}
+  \item \texttt{screenshots/08-profile-page.png}
+  \item \texttt{screenshots/09-theme-language.png}
+  \item \texttt{screenshots/10-logout.png}
+\end{enumerate}
+
+\section{Historique des versions}
+\begin{center}
+\begin{tabular}{|>{\raggedright\arraybackslash}p{2.2cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{3.0cm}|>{\raggedright\arraybackslash}p{5.2cm}|}
+\hline
+\textbf{Version} & \textbf{Date} & \textbf{Auteur} & \textbf{Modification} \\
+\hline
+1.1 & \today & Équipe Smart-Agro & Réécriture du guide en style narratif et professionnel. \\
+\hline
+\end{tabular}
+\end{center}
+
+\section{Compilation PDF}
+\begin{verbatim}
+cd docs
+pdflatex guide-utilisateur-smart-agro.tex
+pdflatex guide-utilisateur-smart-agro.tex
+\end{verbatim}
+
+\end{document}
