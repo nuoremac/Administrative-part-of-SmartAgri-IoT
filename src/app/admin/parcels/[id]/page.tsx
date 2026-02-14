@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import EditParcelModal from "@/components/admin/parcels/EditParcelModal";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useT } from "@/components/i18n/useT";
 import { useLang } from "@/components/i18n/LangProvider";
@@ -52,7 +50,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
   const pushRef = useRef(push);
   const tRef = useRef(t);
 
-  const [editOpen, setEditOpen] = useState(false);
   const [parcel, setParcel] = useState<ParcelleResponse | null>(null);
   const [terrain, setTerrain] = useState<TerrainResponse | null>(null);
   const [measurements, setMeasurements] = useState<SensorMeasurementsResponse[]>([]);
@@ -60,7 +57,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
   const [loading, setLoading] = useState(false);
   const [range, setRange] = useState<"24h" | "7d">("24h");
   const [showCharts, setShowCharts] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     pushRef.current = push;
@@ -228,42 +224,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
   const level: "ok" | "warning" | "offline" =
     !latest ? "offline" : latest.humidity != null && latest.humidity < 35 ? "warning" : "ok";
 
-  const handleSaveEdit = async (patch: { nom: string; superficie: number }) => {
-    if (!parcel) return;
-    try {
-      const updatedPayload = await ParcellesService.updateParcelleApiV1ParcellesParcellesParcelleIdPut(parcel.id, {
-        nom: patch.nom,
-        superficie: patch.superficie,
-      });
-      const updated = unwrapData<ParcelleResponse>(updatedPayload);
-      setParcel(updated);
-      setEditOpen(false);
-      push({
-        title: t("edit_parcel"),
-        message: updated?.nom ?? patch.nom,
-        kind: "success",
-      });
-    } catch {
-      push({ title: t("load_failed"), kind: "error" });
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!parcel) return;
-    setDeleteOpen(false);
-    try {
-      await ParcellesService.deleteParcelleApiV1ParcellesParcellesParcelleIdDelete(parcel.id);
-      push({
-        title: t("delete_toast_title"),
-        message: parcel.nom,
-        kind: "success",
-      });
-      router.push("/admin/parcels");
-    } catch {
-      push({ title: t("load_failed"), kind: "error" });
-    }
-  };
-
   if (!id) {
     return <ParcelDetailsSkeleton />;
   }
@@ -324,51 +284,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
             <option value="24h">{t("dashboard_range_24h")}</option>
             <option value="7d">{t("dashboard_range_7d")}</option>
           </select>
-          <button
-            type="button"
-            onClick={() => setEditOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-500 text-white hover:bg-amber-600"
-            aria-label={t("edit")}
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-            </svg>
-            <span className="sr-only">{t("edit")}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
-            aria-label={t("delete")}
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 6h18" />
-              <path d="M8 6V4h8v2" />
-              <path d="M19 6l-1 14H6L5 6" />
-              <path d="M10 11v6" />
-              <path d="M14 11v6" />
-            </svg>
-            <span className="sr-only">{t("delete")}</span>
-          </button>
         </div>
       </div>
 
@@ -381,11 +296,7 @@ function ParcelDetailsInner({ id }: { id: string }) {
             <Row label={t("table_status")} value={statusLabel(level, t)} />
             <Row label={t("parcel_area_label")} value={`${parcel.superficie.toLocaleString()} m²`} />
             <Row label={t("parcel_sensors_label")} value={`${sensors.length || 0}`} />
-            {terrain ? (
-              <Row label={t("table_terrain")} value={terrain.nom} />
-            ) : (
-              <Row label={t("table_terrain")} value={parcel.terrain_id} />
-            )}
+            <Row label={t("table_terrain")} value={terrain?.nom?.trim() || "-"} />
           </div>
         </div>
 
@@ -443,25 +354,6 @@ function ParcelDetailsInner({ id }: { id: string }) {
         </div>
       </div>
 
-      <EditParcelModal
-        key={parcel.id}
-        open={editOpen}
-        parcel={parcel}
-        onClose={() => setEditOpen(false)}
-        onSave={(patch) => {
-          void handleSaveEdit(patch);
-        }}
-      />
-
-      <ConfirmDialog
-        open={deleteOpen}
-        title={t("delete_confirm_title")}
-        message={t("delete_confirm_body")}
-        confirmLabel={t("delete")}
-        cancelLabel={t("cancel")}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteOpen(false)}
-      />
     </div>
   );
 }
