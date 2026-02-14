@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useToast } from "@/components/ui/ToastProvider";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useT } from "@/components/i18n/useT";
+import { ApiError } from "@/lib/core/ApiError";
 import type { Capteur } from "@/lib/models/Capteur";
 import { fetchSensors } from "@/lib/apiData";
 import { CapteursService } from "@/lib/services/CapteursService";
@@ -23,10 +25,60 @@ export default function SensorsPage() {
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("id");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [confirmSensor, setConfirmSensor] = useState<Capteur | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isAdding, setIsAdding] = useState(false);
   const [draft, setDraft] = useState({ nom: "", dev_eui: "", code: "" });
   const [sensors, setSensors] = useState<Capteur[]>([]);
+
+  const resolveApiErrorMessage = (error: unknown): string | undefined => {
+    if (!(error instanceof ApiError)) return undefined;
+    const body = error.body;
+
+    if (typeof body === "string" && body.trim()) return body;
+    if (!body || typeof body !== "object") return undefined;
+
+    const message = (body as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+
+    const detail = (body as { detail?: unknown }).detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const first = detail[0];
+      if (first && typeof first === "object") {
+        const msg = (first as { msg?: unknown }).msg;
+        if (typeof msg === "string" && msg.trim()) return msg;
+      }
+    }
+
+    return undefined;
+  };
+
+  const resolveCreateSensorError = (error: unknown): string | undefined => {
+    if (!(error instanceof ApiError)) return undefined;
+
+    const details = resolveApiErrorMessage(error)?.toLowerCase() ?? "";
+    const bodyText = (() => {
+      try {
+        return JSON.stringify(error.body).toLowerCase();
+      } catch {
+        return "";
+      }
+    })();
+    const context = `${details} ${bodyText}`;
+
+    const looksLikeDuplicate =
+      error.status === 409 ||
+      context.includes("already exists") ||
+      context.includes("already exist") ||
+      context.includes("duplicate") ||
+      context.includes("unique");
+
+    if (!looksLikeDuplicate) return undefined;
+    if (context.includes("dev_eui") || context.includes("deveui")) return t("sensor_error_dev_eui_exists");
+    if (context.includes("code")) return t("sensor_error_code_exists");
+    return t("sensor_error_exists_generic");
+  };
 
   useEffect(() => {
     let canceled = false;
@@ -87,6 +139,46 @@ export default function SensorsPage() {
       return;
     }
     setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+  };
+
+  const confirmDelete = async () => {
+    if (!confirmSensor) return;
+    const sensorToDelete = confirmSensor;
+    setConfirmSensor(null);
+
+    const removeFromList = () => {
+      setSensors((prev) => prev.filter((row) => row.id !== sensorToDelete.id));
+    };
+
+    try {
+      await CapteursService.deleteCapteurApiV1CapteursCapteurIdDelete(sensorToDelete.id);
+      removeFromList();
+      push({
+        title: t("delete_toast_title"),
+        message: sensorToDelete.nom || sensorToDelete.code || sensorToDelete.id,
+        kind: "success",
+      });
+    } catch (error) {
+      try {
+        await CapteursService.readCapteurApiV1CapteursCapteurIdGet(sensorToDelete.id);
+      } catch (verifyError) {
+        if (verifyError instanceof ApiError && verifyError.status === 404) {
+          removeFromList();
+          push({
+            title: t("delete_toast_title"),
+            message: sensorToDelete.nom || sensorToDelete.code || sensorToDelete.id,
+            kind: "success",
+          });
+          return;
+        }
+      }
+
+      push({
+        title: t("load_failed"),
+        message: error instanceof ApiError ? `${error.status} ${error.statusText}` : undefined,
+        kind: "error",
+      });
+    }
   };
 
   return (
@@ -200,8 +292,17 @@ export default function SensorsPage() {
                     message: created?.nom ?? nom,
                     kind: "success",
                   });
-                } catch {
-                  push({ title: t("load_failed"), kind: "error" });
+                } catch (error) {
+                  const duplicateMessage = resolveCreateSensorError(error);
+                  if (duplicateMessage) {
+                    push({ title: t("invalidCredentials"), message: duplicateMessage, kind: "error" });
+                    return;
+                  }
+                  push({
+                    title: t("load_failed"),
+                    message: error instanceof ApiError ? `${error.status} ${error.statusText}` : undefined,
+                    kind: "error",
+                  });
                 }
               }}
               className="rounded-sm bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
@@ -229,13 +330,14 @@ export default function SensorsPage() {
                 <ThSortable label={t("table_code")} active={sortKey === "code"} dir={sortDir} onClick={() => toggleSort("code")} />
                 <ThSortable label="DevEUI" active={sortKey === "dev_eui"} dir={sortDir} onClick={() => toggleSort("dev_eui")} />
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_view")}</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("delete")}</th>
               </tr>
             </thead>
 
             <tbody>
               {listResult.items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
                     {t("empty_sensors")}
                   </td>
                 </tr>
@@ -251,29 +353,54 @@ export default function SensorsPage() {
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{s.dev_eui}</td>
 
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/admin/sensors/${s.id}`)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700"
-                          aria-label={t("consult")}
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/admin/sensors/${s.id}`)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700"
+                        aria-label={t("consult")}
+                      >
+                        <svg
+                          aria-hidden="true"
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
                         >
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 24 24"
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-                            <circle cx="12" cy="12" r="3" />
-                          </svg>
-                          <span className="sr-only">{t("consult")}</span>
-                        </button>
-                      </div>
+                          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <span className="sr-only">{t("consult")}</span>
+                      </button>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmSensor(s)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
+                        aria-label={t("delete")}
+                      >
+                        <svg
+                          aria-hidden="true"
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                        <span className="sr-only">{t("delete")}</span>
+                      </button>
                     </td>
                   </tr>
                 );
@@ -293,6 +420,16 @@ export default function SensorsPage() {
           <Pagination page={safePage} totalPages={totalPages} onChange={(p) => setPage(p)} />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!confirmSensor}
+        title={t("delete_confirm_title")}
+        message={t("delete_confirm_body")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("cancel")}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmSensor(null)}
+      />
 
     </div>
   );

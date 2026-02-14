@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useT } from "@/components/i18n/useT";
 import { useLang } from "@/components/i18n/LangProvider";
 import { useToast } from "@/components/ui/ToastProvider";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import type { Capteur } from "@/lib/models/Capteur";
 import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
 import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
@@ -41,7 +40,6 @@ export default function SensorDetailsPage() {
   const [measurements, setMeasurements] = useState<SensorMeasurementsResponse[]>([]);
   const [latest, setLatest] = useState<SensorMeasurementsResponse | null>(null);
   const [showCharts, setShowCharts] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const metricsData = useMemo(() => {
     if (!measurements.length) return [];
@@ -221,21 +219,6 @@ export default function SensorDetailsPage() {
     }
   };
 
-  const handleDelete = async () => {
-    setDeleteOpen(false);
-    try {
-      await CapteursService.deleteCapteurApiV1CapteursCapteurIdDelete(sensor.id);
-      push({
-        title: t("delete_toast_title"),
-        message: sensor.nom,
-        kind: "success",
-      });
-      router.push("/admin/sensors");
-    } catch {
-      push({ title: t("load_failed"), kind: "error" });
-    }
-  };
-
   return (
     <div className="min-h-[calc(100vh-72px)] bg-[#dff7df] p-4 dark:bg-[#0d1117]">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -299,30 +282,6 @@ export default function SensorDetailsPage() {
               <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
             </svg>
             <span className="sr-only">{t("edit")}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
-            aria-label={t("delete")}
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 6h18" />
-              <path d="M8 6V4h8v2" />
-              <path d="M19 6l-1 14H6L5 6" />
-              <path d="M10 11v6" />
-              <path d="M14 11v6" />
-            </svg>
-            <span className="sr-only">{t("delete")}</span>
           </button>
         </div>
       </div>
@@ -413,15 +372,6 @@ export default function SensorDetailsPage() {
         </div>
       </div>
 
-      <ConfirmDialog
-        open={deleteOpen}
-        title={t("delete_confirm_title")}
-        message={t("delete_confirm_body")}
-        confirmLabel={t("delete")}
-        cancelLabel={t("cancel")}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteOpen(false)}
-      />
     </div>
   );
 }
