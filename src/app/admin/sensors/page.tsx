@@ -273,6 +273,14 @@ export default function SensorsPage() {
                   push({ title: t("invalidCredentials"), message: t("sensor_error_code"), kind: "error" });
                   return;
                 }
+                const normalizedCode = code.toLowerCase();
+                const codeAlreadyExists = sensors.some(
+                  (sensorRow) => sensorRow.code.trim().toLowerCase() === normalizedCode
+                );
+                if (codeAlreadyExists) {
+                  push({ title: t("invalidCredentials"), message: t("sensor_error_code_exists"), kind: "error" });
+                  return;
+                }
 
                 const now = new Date().toISOString();
                 try {

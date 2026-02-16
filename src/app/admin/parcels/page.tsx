@@ -336,7 +336,7 @@ export default function ParcelsPage() {
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code ?? "—"}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie} m²</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie.toLocaleString()} ha</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                       {resolveTerrainName(p) ?? "—"}
                     </td>

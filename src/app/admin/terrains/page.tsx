@@ -276,7 +276,7 @@ export default function TerrainsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                      {(terrainAreaMap.get(row.id) ?? 0).toLocaleString()} m²
+                      {(terrainAreaMap.get(row.id) ?? 0).toLocaleString()} ha
                     </td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                       {localiteMap.get(row.localite_id) ?? row.localite_id}

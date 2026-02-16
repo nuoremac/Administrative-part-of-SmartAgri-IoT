@@ -110,9 +110,9 @@ export default function TerrainDetailsPage() {
   }, [parcels]);
 
   const totalAreaLabel = useMemo(() => {
-    if (!parcels.length) return "0 m²";
+    if (!parcels.length) return "0 ha";
     const total = parcels.reduce((sum, parcel) => sum + (parcel.superficie ?? 0), 0);
-    return `${total.toLocaleString()} m²`;
+    return `${total.toLocaleString()} ha`;
   }, [parcels]);
 
   const ownerLabel = useMemo(() => {
@@ -376,8 +376,8 @@ export default function TerrainDetailsPage() {
             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t("terrain_parcel_stats_title")}</p>
             <div className="mt-3 space-y-2">
               <Row label={t("table_parcels")} value={`${parcelsResult.total}`} />
-              <Row label={t("terrain_parcel_total_area")} value={`${parcelStats.totalArea.toLocaleString()} m²`} />
-              <Row label={t("terrain_parcel_avg_area")} value={`${parcelStats.avgArea.toLocaleString()} m²`} />
+              <Row label={t("terrain_parcel_total_area")} value={`${parcelStats.totalArea.toLocaleString()} ha`} />
+              <Row label={t("terrain_parcel_avg_area")} value={`${parcelStats.avgArea.toLocaleString()} ha`} />
             </div>
           </div>
         </div>
@@ -415,7 +415,7 @@ export default function TerrainDetailsPage() {
                       <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code ?? "—"}</td>
                       <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
                       <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie.toLocaleString()} ha</td>
                       <td className="px-4 py-3">
                         <button
                           type="button"

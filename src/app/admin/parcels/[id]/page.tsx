@@ -294,7 +294,7 @@ function ParcelDetailsInner({ id }: { id: string }) {
             <Row label={t("table_name")} value={parcel.nom} />
             <Row label={t("table_code")} value={parcel.code ?? "—"} />
             <Row label={t("table_status")} value={statusLabel(level, t)} />
-            <Row label={t("parcel_area_label")} value={`${parcel.superficie.toLocaleString()} m²`} />
+            <Row label={t("parcel_area_label")} value={`${parcel.superficie.toLocaleString()} ha`} />
             <Row label={t("parcel_sensors_label")} value={`${sensors.length || 0}`} />
             <Row label={t("table_terrain")} value={terrain?.nom?.trim() || "-"} />
           </div>
