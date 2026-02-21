@@ -65,6 +65,15 @@ function IconParcels() {
   );
 }
 
+function IconLocalities() {
+  return (
+    <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </svg>
+  );
+}
+
 function IconSensors() {
   return (
     <svg viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -236,6 +245,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       { href: "/admin/dashboard", label: t("nav_dashboard"), icon: <IconDashboard /> },
       { href: "/admin/users", label: t("nav_users"), icon: <IconUsers /> },
       { href: "/admin/terrains", label: t("nav_terrains"), icon: <IconTerrains /> },
+      { href: "/admin/localities", label: t("nav_localities"), icon: <IconLocalities /> },
       { href: "/admin/parcels", label: t("nav_parcels"), icon: <IconParcels /> },
       { href: "/admin/sensors", label: t("nav_sensors"), icon: <IconSensors /> },
       { href: "/admin/profile", label: t("nav_profile"), icon: <IconProfile /> },

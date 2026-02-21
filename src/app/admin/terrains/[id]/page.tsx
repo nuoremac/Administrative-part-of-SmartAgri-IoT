@@ -19,6 +19,11 @@ import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService"
 import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
 import type { UserResponse } from "@/lib/models/UserResponse";
 import { unwrapList } from "@/lib/apiHelpers";
+import {
+  CAMEROON_COUNTRY,
+  filterCameroonLocalities,
+  getCameroonClimateZoneLabelKey,
+} from "@/lib/cameroonLocalities";
 
 export default function TerrainDetailsPage() {
   const router = useRouter();
@@ -74,7 +79,7 @@ export default function TerrainDetailsPage() {
         ]);
 
         if (canceled) return;
-        if (localitesResult.status === "fulfilled") setLocalites(localitesResult.value);
+        if (localitesResult.status === "fulfilled") setLocalites(filterCameroonLocalities(localitesResult.value));
         else setLocalites([]);
         if (usersResult.status === "fulfilled") setUsers(usersResult.value);
         else setUsers([]);
@@ -229,13 +234,13 @@ export default function TerrainDetailsPage() {
     }
   };
 
-  const handleAddLocalite = async (data: { nom: string; ville: string; pays: string }) => {
-    if (!data.nom || !data.ville || !data.pays) return;
+  const handleAddLocalite = async (data: { nom: string; ville: string }) => {
+    if (!data.nom || !data.ville) return;
     try {
       await LocalitSService.createLocaliteApiV1LocalitesLocalitesPost({
         nom: data.nom,
         ville: data.ville,
-        pays: data.pays,
+        pays: CAMEROON_COUNTRY,
         continent: Continent.AFRIQUE,
         climate_zone: ClimateZone.TROPICAL,
       });
@@ -338,7 +343,10 @@ export default function TerrainDetailsPage() {
               <Row label={t("terrain_owner")} value={ownerLabel} />
               <Row label={t("terrain_area")} value={totalAreaLabel} />
               <Row label={t("terrain_localite")} value={localite ? `${localite.nom} — ${localite.ville}, ${localite.pays}` : terrain.localite_id} />
-              <Row label={t("table_climate_zone")} value={localite?.climate_zone ?? "—"} />
+              <Row
+                label={t("table_climate_zone")}
+                value={localite?.climate_zone ? t(getCameroonClimateZoneLabelKey(localite.climate_zone)) : "—"}
+              />
               <Row label={t("table_parcels")} value={`${parcelsResult.total}`} />
               <Row label={t("dashboard_last_update")} value={latestMeasurement ? formatLastUpdate(latestMeasurement) : "—"} />
             </div>
@@ -349,7 +357,9 @@ export default function TerrainDetailsPage() {
             <p className="mt-2 font-semibold text-gray-900 dark:text-gray-100">
               {localite ? `${localite.nom} — ${localite.ville}, ${localite.pays}` : terrain.localite_id}
             </p>
-            <p className="mt-1 text-gray-600 dark:text-gray-400">{localite?.climate_zone ?? "—"}</p>
+            <p className="mt-1 text-gray-600 dark:text-gray-400">
+              {localite?.climate_zone ? t(getCameroonClimateZoneLabelKey(localite.climate_zone)) : "—"}
+            </p>
             <a
               className="mt-3 inline-flex items-center gap-1 font-semibold text-green-700 hover:underline dark:text-green-400"
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(

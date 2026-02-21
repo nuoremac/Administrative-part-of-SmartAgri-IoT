@@ -13,7 +13,7 @@ import { ParcellesService } from "@/lib/services/ParcellesService";
 import { TerrainsService } from "@/lib/services/TerrainsService";
 import { unwrapData } from "@/lib/apiHelpers";
 
-type SortKey = "id" | "nom" | "code" | "type_sol" | "culture_actuelle" | "superficie" | "terrain_id";
+type SortKey = "id" | "nom" | "code" | "superficie" | "terrain_id";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 10;
 const normalizeId = (value: unknown) => String(value ?? "").trim();
@@ -134,8 +134,6 @@ export default function ParcelsPage() {
     const sorted = [...filtered].sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       const getValue = (row: ParcelleResponse) => {
-        if (sortKey === "type_sol") return "";
-        if (sortKey === "culture_actuelle") return "";
         if (sortKey === "terrain_id") return resolveTerrainName(row) ?? normalizeId(row.terrain_id);
         return (row as Record<string, unknown>)[sortKey] ?? "";
       };
@@ -311,8 +309,6 @@ export default function ParcelsPage() {
               <tr className="border-b border-gray-400 dark:border-gray-800">
                 <ThSortable label={t("table_name")} active={sortKey === "nom"} dir={sortDir} onClick={() => toggleSort("nom")} />
                 <ThSortable label={t("table_code")} active={sortKey === "code"} dir={sortDir} onClick={() => toggleSort("code")} />
-                <ThSortable label={t("table_soil_type")} active={sortKey === "type_sol"} dir={sortDir} onClick={() => toggleSort("type_sol")} />
-                <ThSortable label={t("table_current_crop")} active={sortKey === "culture_actuelle"} dir={sortDir} onClick={() => toggleSort("culture_actuelle")} />
                 <ThSortable label={t("table_area")} active={sortKey === "superficie"} dir={sortDir} onClick={() => toggleSort("superficie")} />
                 <ThSortable label={t("table_terrain")} active={sortKey === "terrain_id"} dir={sortDir} onClick={() => toggleSort("terrain_id")} />
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_view")}</th>
@@ -322,7 +318,7 @@ export default function ParcelsPage() {
             <tbody>
               {listResult.items.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-600 dark:text-gray-400">
                     {t("empty_parcels")}
                   </td>
                 </tr>
@@ -334,8 +330,6 @@ export default function ParcelsPage() {
                   >
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.nom}</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.code ?? "—"}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-gray-200">—</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.superficie.toLocaleString()} ha</td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                       {resolveTerrainName(p) ?? "—"}

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useT } from "@/components/i18n/useT";
 import type { LocaliteResponse } from "@/lib/models/LocaliteResponse";
 import type { TerrainResponse } from "@/lib/models/TerrainResponse";
+import { filterCameroonLocalities } from "@/lib/cameroonLocalities";
 
 type FormState = {
   nom: string;
@@ -28,18 +29,19 @@ export default function TerrainModal({
   onAddLocalite: () => void;
 }) {
   const { t } = useT();
+  const scopedLocalites = useMemo(() => filterCameroonLocalities(localites), [localites]);
   const initialForm = useMemo(
     () => ({
       nom: initial?.nom ?? "",
-      localite_id: initial?.localite_id ?? (localites[0]?.id ?? ""),
+      localite_id: initial?.localite_id ?? (scopedLocalites[0]?.id ?? ""),
     }),
-    [initial, localites]
+    [initial, scopedLocalites]
   );
   const [form, setForm] = useState<FormState>(initialForm);
 
   const localiteOptions = useMemo(() => {
-    return localites.map((l) => ({ id: l.id, label: `${l.nom} — ${l.ville}, ${l.pays}` }));
-  }, [localites]);
+    return scopedLocalites.map((l) => ({ id: l.id, label: `${l.nom} — ${l.ville}, ${l.pays}` }));
+  }, [scopedLocalites]);
 
   if (!open) return null;
 

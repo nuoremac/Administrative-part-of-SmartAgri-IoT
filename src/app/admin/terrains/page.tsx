@@ -17,6 +17,11 @@ import { LocalitSService } from "@/lib/services/LocalitSService";
 import { TerrainsService } from "@/lib/services/TerrainsService";
 import { Continent } from "@/lib/models/Continent";
 import { ClimateZone } from "@/lib/models/ClimateZone";
+import {
+  CAMEROON_COUNTRY,
+  filterCameroonLocalities,
+  getCameroonClimateZoneLabelKey,
+} from "@/lib/cameroonLocalities";
 
 type SortKey = "id" | "nom" | "user_id" | "superficie_totale" | "localite_id";
 type SortDir = "asc" | "desc";
@@ -55,7 +60,7 @@ export default function TerrainsPage() {
         const parcelList = await fetchAllParcels(terrainList);
         if (canceled) return;
         setTerrains(terrainList);
-        setLocalites(localiteList);
+        setLocalites(filterCameroonLocalities(localiteList));
         setUsers(userList);
         setParcels(parcelList);
       } catch {
@@ -197,13 +202,13 @@ export default function TerrainsPage() {
     }
   };
 
-  const handleAddLocalite = async (data: { nom: string; ville: string; pays: string }) => {
-    if (!data.nom || !data.ville || !data.pays) return;
+  const handleAddLocalite = async (data: { nom: string; ville: string }) => {
+    if (!data.nom || !data.ville) return;
     try {
       await LocalitSService.createLocaliteApiV1LocalitesLocalitesPost({
         nom: data.nom,
         ville: data.ville,
-        pays: data.pays,
+        pays: CAMEROON_COUNTRY,
         continent: Continent.AFRIQUE,
         climate_zone: ClimateZone.TROPICAL,
       });
@@ -282,7 +287,9 @@ export default function TerrainsPage() {
                       {localiteMap.get(row.localite_id) ?? row.localite_id}
                     </td>
                     <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                      {localiteById.get(row.localite_id)?.climate_zone ?? "—"}
+                      {localiteById.get(row.localite_id)?.climate_zone
+                        ? t(getCameroonClimateZoneLabelKey(localiteById.get(row.localite_id)?.climate_zone))
+                        : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">

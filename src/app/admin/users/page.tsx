@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import UserModal from "@/components/admin/users/UserModal";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
 import { useT } from "@/components/i18n/useT";
@@ -11,7 +10,6 @@ import type { UserRow } from "@/lib/mockUsers";
 import type { UserResponse } from "@/lib/models/UserResponse";
 import { OpenAPI } from "@/lib/core/OpenAPI";
 import { getAccessToken, getCurrentUser } from "@/lib/authSession";
-import { AuthenticationService } from "@/lib/services/AuthenticationService";
 import { UsersService } from "@/lib/services/UsersService";
 import { fetchAllParcels, fetchTerrains } from "@/lib/apiData";
 
@@ -25,7 +23,6 @@ export default function AdminUsersPage() {
   const { lang } = useLang();
   const { query: q } = useAdminSearch();
 
-  const [refreshKey, setRefreshKey] = useState(0);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [parcelsByUser, setParcelsByUser] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(false);
@@ -33,10 +30,6 @@ export default function AdminUsersPage() {
   const [sortKey, setSortKey] = useState<SortKey>("nom");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
-  const [editing, setEditing] = useState<UserRow | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
   const currentUser = getCurrentUser();
   const pushRef = useRef(push);
@@ -174,7 +167,7 @@ export default function AdminUsersPage() {
     return () => {
       canceled = true;
     };
-  }, [refreshKey, lang]);
+  }, [lang]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -215,77 +208,6 @@ export default function AdminUsersPage() {
   const totalPages = Math.max(1, Math.ceil(listResult.total / PAGE_SIZE));
   const safePage = Math.min(Math.max(page, 1), totalPages);
 
-  const openCreate = () => {
-    setModalMode("create");
-    setEditing(null);
-    setModalOpen(true);
-  };
-
-  const openEdit = (u: UserRow) => {
-    setModalMode("edit");
-    setEditing(u);
-    setModalOpen(true);
-  };
-
-  const onSubmitModal = async (data: Omit<UserRow, "id"> & { password?: string }) => {
-    if (!data.nom?.trim() || !data.prenom?.trim() || !data.email?.trim()) {
-      push({
-        title: t("invalidCredentials"),
-        message: t("email"),
-        kind: "error",
-      });
-      return;
-    }
-
-    if (modalMode === "create") {
-      try {
-        if (!data.password?.trim()) {
-          push({ title: t("invalidCredentials"), message: t("password"), kind: "error" });
-          return;
-        }
-        const created = await AuthenticationService.registerUserApiV1AuthRegisterUserPost({
-          nom: data.nom.trim(),
-          prenom: data.prenom.trim(),
-          email: data.email.trim(),
-          telephone: data.telephone?.trim() || null,
-          password: data.password.trim(),
-        });
-        const resolved = resolveUser(created) ?? (created as UserResponse);
-        setUsers((prev) => [toUserRow(resolved), ...prev]);
-        setModalOpen(false);
-        push({
-          title: t("add_user"),
-          message: `${data.prenom} ${data.nom}`,
-          kind: "success",
-        });
-      } catch {
-        push({ title: t("profile_update_failed"), kind: "error" });
-      }
-      return;
-    }
-
-    if (editing) {
-      try {
-        const updated = await UsersService.updateUserApiV1UsersUserIdPut(editing.id, {
-          nom: data.nom.trim(),
-          prenom: data.prenom.trim(),
-          telephone: data.telephone.trim() || null,
-          avatar: data.avatar.trim() || null,
-        });
-        const resolved = resolveUser(updated) ?? (updated as UserResponse);
-        setUsers((prev) => prev.map((u) => (u.id === editing.id ? toUserRow(resolved) : u)));
-        setModalOpen(false);
-        push({
-          title: t("edit_user"),
-          message: `${data.prenom} ${data.nom}`,
-          kind: "success",
-        });
-      } catch {
-        push({ title: t("profile_update_failed"), kind: "error" });
-      }
-    }
-  };
-
   const handleDelete = async () => {
     if (!confirmDelete) return;
     const target = confirmDelete;
@@ -308,14 +230,6 @@ export default function AdminUsersPage() {
           </h1>
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{t("global_search_placeholder")}</p>
         </div>
-
-        <button
-          type="button"
-          onClick={openCreate}
-          className="h-9 rounded-sm bg-green-600 px-3 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          + {t("add_user")}
-        </button>
       </div>
 
       {q ? (
@@ -336,7 +250,7 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_parcels")}</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_status")}</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_last_activity")}</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("table_actions")}</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{t("delete")}</th>
               </tr>
             </thead>
 
@@ -379,58 +293,34 @@ export default function AdminUsersPage() {
                     </td>
 
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(u)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700"
-                          aria-label={t("edit")}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmDelete(u);
+                        }}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
+                        aria-label={t("delete")}
+                        disabled={currentUser?.id === u.id}
+                        title={currentUser?.id === u.id ? t("delete_self_disabled") : t("delete")}
+                      >
+                        <svg
+                          aria-hidden="true"
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
                         >
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 24 24"
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                          </svg>
-                          <span className="sr-only">{t("edit")}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setConfirmDelete(u);
-                          }}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
-                          aria-label={t("delete")}
-                          disabled={currentUser?.id === u.id}
-                          title={currentUser?.id === u.id ? t("delete_self_disabled") : t("delete")}
-                        >
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 24 24"
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M3 6h18" />
-                            <path d="M8 6V4h8v2" />
-                            <path d="M19 6l-1 14H6L5 6" />
-                            <path d="M10 11v6" />
-                            <path d="M14 11v6" />
-                          </svg>
-                          <span className="sr-only">{t("delete")}</span>
-                        </button>
-                      </div>
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                        <span className="sr-only">{t("delete")}</span>
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -449,15 +339,6 @@ export default function AdminUsersPage() {
           <Pagination page={safePage} totalPages={totalPages} onChange={(p) => setPage(p)} />
         </div>
       </div>
-
-      <UserModal
-        key={`${modalMode}_${editing?.id ?? "new"}_${modalOpen ? "open" : "closed"}`}
-        open={modalOpen}
-        mode={modalMode}
-        initial={editing}
-        onClose={() => setModalOpen(false)}
-        onSubmit={onSubmitModal}
-      />
 
       <ConfirmDialog
         open={!!confirmDelete}
