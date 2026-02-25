@@ -719,7 +719,11 @@ function TrendPanel({
               />
               <YAxis width={30} tick={{ fontSize: 10 }} domain={domain} />
               <Tooltip
-                formatter={(value: number) => `${value.toFixed(1)}${unit ? ` ${unit}` : ""}`}
+                formatter={(value) => {
+                  if (typeof value === "number") return `${value.toFixed(1)}${unit ? ` ${unit}` : ""}`;
+                  if (typeof value === "string") return `${value}${unit ? ` ${unit}` : ""}`;
+                  return `—${unit ? ` ${unit}` : ""}`;
+                }}
                 labelFormatter={(label) => xLabelFormatter(label as number | string)}
               />
               <Line
