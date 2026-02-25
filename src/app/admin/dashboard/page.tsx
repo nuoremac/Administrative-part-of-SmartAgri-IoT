@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useT } from "@/components/i18n/useT";
 import { useAdminSearch } from "@/components/admin/AdminSearchProvider";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { Capteur } from "@/lib/models/Capteur";
 import type { ParcelleResponse } from "@/lib/models/ParcelleResponse";
 import type { SensorMeasurementsResponse } from "@/lib/models/SensorMeasurementsResponse";
@@ -12,7 +21,8 @@ import type { UserResponse } from "@/lib/models/UserResponse";
 import { fetchAllMeasurements, fetchAllParcels, fetchSensors, fetchTerrains, fetchUsers } from "@/lib/apiData";
 import { AdministrationService } from "@/lib/services/AdministrationService";
 import { DonnEsDeCapteursService } from "@/lib/services/DonnEsDeCapteursService";
-import { unwrapList } from "@/lib/apiHelpers";
+import { ParcellesService } from "@/lib/services/ParcellesService";
+import { unwrapData, unwrapList } from "@/lib/apiHelpers";
 
 type AlertLevel = "critical" | "warning" | "info";
 
@@ -25,6 +35,11 @@ type Alert = {
   parcelCode?: string;
 };
 
+type TrendPoint = {
+  ts: number;
+  value: number | null;
+};
+
 export default function AdminDashboardPage() {
   const { t } = useT();
   const { query } = useAdminSearch();
@@ -33,6 +48,7 @@ export default function AdminDashboardPage() {
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [terrains, setTerrains] = useState<TerrainResponse[]>([]);
   const [parcels, setParcels] = useState<ParcelleResponse[]>([]);
+  const [extraParcelsById, setExtraParcelsById] = useState<Map<string, ParcelleResponse>>(new Map());
   const [sensors, setSensors] = useState<Capteur[]>([]);
   const [measurements, setMeasurements] = useState<SensorMeasurementsResponse[]>([]);
   const [selectedParcelId, setSelectedParcelId] = useState<string>("");
@@ -130,8 +146,66 @@ export default function AdminDashboardPage() {
     },
   ];
 
-  const parcelMap = useMemo(() => new Map(parcels.map((p) => [p.id, p])), [parcels]);
+  const parcelMap = useMemo(() => {
+    const map = new Map(parcels.map((p) => [p.id, p]));
+    extraParcelsById.forEach((parcel, id) => map.set(id, parcel));
+    return map;
+  }, [parcels, extraParcelsById]);
   const sensorMap = useMemo(() => new Map(sensors.map((s) => [s.id, s])), [sensors]);
+
+  useEffect(() => {
+    let canceled = false;
+
+    const missingIds = Array.from(
+      new Set(
+        measurements
+          .map((measurement) => measurement.parcelle_id)
+          .filter((parcelId) => parcelId && !parcelMap.has(parcelId))
+      )
+    );
+
+    if (!missingIds.length) return;
+
+    const loadMissingParcels = async () => {
+      const fetched = await Promise.all(
+        missingIds.map(async (parcelId) => {
+          try {
+            const payload = await ParcellesService.getParcelleApiV1ParcellesParcellesParcelleIdGet(parcelId);
+            return unwrapData<ParcelleResponse>(payload);
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      if (canceled) return;
+
+      setExtraParcelsById((previous) => {
+        const next = new Map(previous);
+        let changed = false;
+        fetched.forEach((parcel) => {
+          if (!parcel?.id || next.has(parcel.id)) return;
+          next.set(parcel.id, parcel);
+          changed = true;
+        });
+        return changed ? next : previous;
+      });
+    };
+
+    void loadMissingParcels();
+    return () => {
+      canceled = true;
+    };
+  }, [measurements, parcelMap]);
+
+  const getParcelLabel = useCallback((parcelId: string) => {
+    const parcel = parcelMap.get(parcelId);
+    if (!parcel) return "—";
+    const code = parcel.code?.trim();
+    const name = parcel.nom?.trim();
+    if (code && name) return `${code} — ${name}`;
+    return name || code || "—";
+  }, [parcelMap]);
 
   useEffect(() => {
     if (!parcels.length) return;
@@ -174,18 +248,16 @@ export default function AdminDashboardPage() {
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     return sorted.slice(0, 3).map((m) => {
       const sensor = sensorMap.get(m.capteur_id);
-      const parcel = parcelMap.get(m.parcelle_id);
-      const parcelLabel = parcel ? `${parcel.code ?? "—"} — ${parcel.nom}` : m.parcelle_id;
       return {
         id: m.id,
         devEui: sensor?.dev_eui ?? "—",
-        parcel: parcelLabel,
+        parcel: getParcelLabel(m.parcelle_id),
         humidity: m.humidity != null ? `${m.humidity}%` : "—",
         temperature: m.temperature != null ? `${m.temperature}°C` : "—",
         time: formatAgo(m.timestamp),
       };
     });
-  }, [measurements, parcelMap, sensorMap]);
+  }, [getParcelLabel, measurements, sensorMap]);
 
   const alerts: Alert[] = useMemo(() => {
     const sorted = measurements
@@ -195,7 +267,6 @@ export default function AdminDashboardPage() {
     for (const m of sorted) {
       if (alertsList.length >= 3) break;
       const parcel = parcelMap.get(m.parcelle_id);
-      const parcelLabel = parcel ? `${parcel.code ?? "—"} — ${parcel.nom}` : m.parcelle_id;
       const title =
         m.humidity != null && m.humidity < 35
           ? t("dashboard_alert_humidity_low")
@@ -209,13 +280,13 @@ export default function AdminDashboardPage() {
         id: m.id,
         level: m.humidity != null && m.humidity < 35 ? "warning" : "info",
         title,
-        subtitle: parcelLabel,
+        subtitle: getParcelLabel(m.parcelle_id),
         time: formatAgo(m.timestamp),
         parcelCode: parcel?.code ?? undefined,
       });
     }
     return alertsList;
-  }, [measurements, parcelMap, t]);
+  }, [getParcelLabel, measurements, parcelMap, t]);
 
   const filteredAlerts = useMemo(() => {
     if (!search) return alerts;
@@ -229,9 +300,19 @@ export default function AdminDashboardPage() {
     .slice()
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     .slice(-trendSize);
-  const humidityTrend = trendBase.map((m) => m.humidity ?? 0);
-  const temperatureTrend = trendBase.map((m) => m.temperature ?? 0);
-  const phTrend = trendBase.map((m) => m.ph ?? 0);
+
+  const humidityTrend: TrendPoint[] = trendBase.map((m) => ({
+    ts: new Date(m.timestamp).getTime(),
+    value: m.humidity,
+  }));
+  const temperatureTrend: TrendPoint[] = trendBase.map((m) => ({
+    ts: new Date(m.timestamp).getTime(),
+    value: m.temperature,
+  }));
+  const phTrend: TrendPoint[] = trendBase.map((m) => ({
+    ts: new Date(m.timestamp).getTime(),
+    value: m.ph,
+  }));
 
   const timeline = useMemo(() => {
     const measurementEvents = measurements
@@ -241,16 +322,14 @@ export default function AdminDashboardPage() {
       .map((m) => ({
         id: `m-${m.id}`,
         title: t("dashboard_timeline_sensor"),
-        meta: parcelMap.get(m.parcelle_id)
-          ? `${parcelMap.get(m.parcelle_id)?.code ?? "—"} — ${parcelMap.get(m.parcelle_id)?.nom}`
-          : m.parcelle_id,
+        meta: getParcelLabel(m.parcelle_id),
         time: formatAgo(m.timestamp),
         ts: new Date(m.timestamp).getTime(),
       }));
     return [...measurementEvents]
       .sort((a, b) => b.ts - a.ts)
       .slice(0, 4);
-  }, [measurements, parcelMap, t]);
+  }, [getParcelLabel, measurements, t]);
 
   return (
     <div className="space-y-4">
@@ -353,9 +432,33 @@ export default function AdminDashboardPage() {
           >
             {showCharts ? (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <TrendPanel title={t("dashboard_trend_humidity")} unit="%" data={humidityTrend} tone="emerald" />
-                <TrendPanel title={t("dashboard_trend_temperature")} unit="°C" data={temperatureTrend} tone="blue" />
-                <TrendPanel title={t("dashboard_trend_ph")} unit="" data={phTrend} tone="amber" />
+                <TrendPanel
+                  title={t("dashboard_trend_humidity")}
+                  unit="%"
+                  data={humidityTrend}
+                  range={range}
+                  tone="emerald"
+                  emptyText={t("dashboard_no_measurements")}
+                  yDomain={[0, 100]}
+                />
+                <TrendPanel
+                  title={t("dashboard_trend_temperature")}
+                  unit="°C"
+                  data={temperatureTrend}
+                  range={range}
+                  tone="blue"
+                  emptyText={t("dashboard_no_measurements")}
+                  yDomain={[0, 100]}
+                />
+                <TrendPanel
+                  title={t("dashboard_trend_ph")}
+                  unit=""
+                  data={phTrend}
+                  range={range}
+                  tone="amber"
+                  emptyText={t("dashboard_no_measurements")}
+                  yDomain={[0, 14]}
+                />
               </div>
             ) : (
               <div className="h-24 rounded-sm bg-gray-100 dark:bg-[#161b22]" />
@@ -523,15 +626,37 @@ function TrendPanel({
   title,
   unit,
   data,
+  range,
   tone,
+  emptyText,
+  yDomain,
 }: {
   title: string;
   unit: string;
-  data: number[];
+  data: TrendPoint[];
+  range: "24h" | "7d" | "30d";
   tone: "emerald" | "amber" | "blue";
+  emptyText: string;
+  yDomain?: readonly [number, number];
 }) {
-  const last = data[data.length - 1] ?? 0;
-  const first = data[0] ?? 0;
+  const chartData = useMemo(() => {
+    const points = data.filter((item) => Number.isFinite(item.ts) && typeof item.value === "number");
+    if (points.length !== 1 || range !== "24h") return points;
+    const center = points[0].ts;
+    const value = points[0].value as number;
+    return [
+      { ...points[0], ts: center - 30 * 60 * 1000, value },
+      points[0],
+      { ...points[0], ts: center + 30 * 60 * 1000, value },
+    ];
+  }, [data, range]);
+
+  const numericValues = chartData
+    .map((point) => point.value)
+    .filter((value): value is number => typeof value === "number");
+  const hasData = numericValues.length > 0;
+  const last = hasData ? numericValues[numericValues.length - 1] : 0;
+  const first = hasData ? numericValues[0] : 0;
   const delta = last - first;
   const deltaLabel = `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}${unit ? ` ${unit}` : ""}`;
   const toneClass =
@@ -540,6 +665,34 @@ function TrendPanel({
       : tone === "amber"
       ? "text-amber-600 dark:text-amber-300"
       : "text-blue-600 dark:text-blue-300";
+  const stroke =
+    tone === "emerald" ? "#10b981" : tone === "amber" ? "#f59e0b" : "#3b82f6";
+  const domain: [number, number] = yDomain
+    ? [yDomain[0], yDomain[1]]
+    : (() => {
+        if (!numericValues.length) return [0, 1];
+        const min = Math.min(...numericValues);
+        const max = Math.max(...numericValues);
+        if (min === max) {
+          const padding = Math.max(Math.abs(min) * 0.1, 1);
+          return [min - padding, max + padding];
+        }
+        const padding = (max - min) * 0.15;
+        return [min - padding, max + padding];
+      })();
+  const xTickFormatter = (value: number | string) => {
+    const ts = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(ts)) return String(value);
+    const d = new Date(ts);
+    if (range === "24h") return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleDateString([], { month: "2-digit", day: "2-digit" });
+  };
+
+  const xLabelFormatter = (value: number | string) => {
+    const ts = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(ts)) return String(value);
+    return new Date(ts).toLocaleString();
+  };
 
   return (
     <div className="rounded-sm border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-[#0d1117]">
@@ -551,40 +704,39 @@ function TrendPanel({
         {last.toFixed(1)}
         {unit ? <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">{unit}</span> : null}
       </p>
-      <div className="mt-2 h-16">
-        <Sparkline data={data} tone={tone} />
-      </div>
+      {hasData ? (
+        <div className="mt-2 h-28">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="ts"
+                type="number"
+                domain={["dataMin", "dataMax"]}
+                tick={{ fontSize: 10 }}
+                minTickGap={12}
+                tickFormatter={xTickFormatter}
+              />
+              <YAxis width={30} tick={{ fontSize: 10 }} domain={domain} />
+              <Tooltip
+                formatter={(value: number) => `${value.toFixed(1)}${unit ? ` ${unit}` : ""}`}
+                labelFormatter={(label) => xLabelFormatter(label as number | string)}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={stroke}
+                strokeWidth={2}
+                dot={{ r: 2 }}
+                connectNulls
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">{emptyText}</p>
+      )}
     </div>
-  );
-}
-
-function Sparkline({ data, tone }: { data: number[]; tone: "emerald" | "amber" | "blue" }) {
-  const safeData = data.length < 2 ? [0, 0] : data;
-  const min = Math.min(...safeData);
-  const max = Math.max(...safeData);
-  const range = max - min || 1;
-  const points = safeData
-    .map((v, i) => {
-      const x = (i / (safeData.length - 1)) * 100;
-      const y = 100 - ((v - min) / range) * 100;
-      return `${x},${y}`;
-    })
-    .join(" ");
-
-  const stroke =
-    tone === "emerald" ? "#10b981" : tone === "amber" ? "#f59e0b" : "#3b82f6";
-  const fill =
-    tone === "emerald"
-      ? "rgba(16,185,129,0.2)"
-      : tone === "amber"
-      ? "rgba(245,158,11,0.2)"
-      : "rgba(59,130,246,0.2)";
-
-  return (
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
-      <polyline points={`0,100 ${points} 100,100`} fill={fill} stroke="none" />
-      <polyline points={points} fill="none" stroke={stroke} strokeWidth="2" />
-    </svg>
   );
 }
 

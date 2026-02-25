@@ -181,15 +181,21 @@ function ParcelDetailsInner({ id }: { id: string }) {
     return measurements
       .slice()
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      .map((m) => ({
-        t: range === "24h" ? new Date(m.timestamp).toLocaleTimeString() : new Date(m.timestamp).toLocaleDateString(),
+      .map((m) => {
+        const ts = new Date(m.timestamp).getTime();
+        return {
+          ts,
+          t: range === "24h"
+            ? new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+            : new Date(ts).toLocaleDateString(),
         ph: m.ph ?? undefined,
         azote: m.azote ?? undefined,
         phosphore: m.phosphore ?? undefined,
         potassium: m.potassium ?? undefined,
         humidity: m.humidity ?? undefined,
         temperature: m.temperature ?? undefined,
-      }));
+        };
+      });
   }, [measurements, range]);
 
   const sensorsList: Sensor[] = useMemo(() => {
@@ -306,12 +312,60 @@ function ParcelDetailsInner({ id }: { id: string }) {
 
           {showCharts ? (
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} yDomain={[0, 14]} yTicks={[0, 7, 14]} />
-              <MetricChart title={t("metric_azote")} unit="mg/kg" dataKey="azote" data={metricsData} />
-              <MetricChart title={t("metric_phosphore")} unit="mg/kg" dataKey="phosphore" data={metricsData} />
-              <MetricChart title={t("metric_potassium")} unit="mg/kg" dataKey="potassium" data={metricsData} />
-              <MetricChart title={t("dashboard_humidity")} unit="%" dataKey="humidity" data={metricsData} />
-              <MetricChart title={t("dashboard_temperature")} unit="°C" dataKey="temperature" data={metricsData} />
+              <MetricChart
+                title={t("metric_ph")}
+                unit=""
+                dataKey="ph"
+                data={metricsData}
+                range={range}
+                emptyText={t("dashboard_no_measurements")}
+                yDomain={[0, 14]}
+                yTicks={[0, 7, 14]}
+              />
+              <MetricChart
+                title={t("metric_azote")}
+                unit="kg/ha"
+                dataKey="azote"
+                data={metricsData}
+                range={range}
+                emptyText={t("dashboard_no_measurements")}
+              />
+              <MetricChart
+                title={t("metric_phosphore")}
+                unit="kg/ha"
+                dataKey="phosphore"
+                data={metricsData}
+                range={range}
+                emptyText={t("dashboard_no_measurements")}
+              />
+              <MetricChart
+                title={t("metric_potassium")}
+                unit="kg/ha"
+                dataKey="potassium"
+                data={metricsData}
+                range={range}
+                emptyText={t("dashboard_no_measurements")}
+              />
+              <MetricChart
+                title={t("dashboard_humidity")}
+                unit="%"
+                dataKey="humidity"
+                data={metricsData}
+                range={range}
+                emptyText={t("dashboard_no_measurements")}
+                yDomain={[0, 100]}
+                yTicks={[0, 25, 50, 75, 100]}
+              />
+              <MetricChart
+                title={t("dashboard_temperature")}
+                unit="°C"
+                dataKey="temperature"
+                data={metricsData}
+                range={range}
+                emptyText={t("dashboard_no_measurements")}
+                yDomain={[0, 100]}
+                yTicks={[0, 25, 50, 75, 100]}
+              />
             </div>
           ) : (
             <div className="mt-3 h-[220px] rounded-sm bg-gray-100 dark:bg-[#161b22]" />
@@ -385,6 +439,8 @@ function MetricChart({
   data,
   dataKey,
   unit,
+  range,
+  emptyText,
   yDomain,
   yTicks,
 }: {
@@ -392,11 +448,51 @@ function MetricChart({
   data: Array<Record<string, string | number | undefined>>;
   dataKey: string;
   unit: string;
+  range: "24h" | "7d";
+  emptyText: string;
   yDomain?: [number, number];
   yTicks?: number[];
 }) {
-  const tooltipFormatter = (value: number | string | undefined) =>
-    `${value ?? "—"}${unit ? ` ${unit}` : ""}`;
+  const tooltipFormatter = (value: number | string | undefined) => {
+    if (value == null || value === "") return `—${unit ? ` ${unit}` : ""}`;
+    if (typeof value === "number") return `${value.toFixed(1)}${unit ? ` ${unit}` : ""}`;
+    return `${value}${unit ? ` ${unit}` : ""}`;
+  };
+  const strokeByKey: Record<string, string> = {
+    ph: "#f59e0b",
+    azote: "#8b5cf6",
+    phosphore: "#14b8a6",
+    potassium: "#ec4899",
+    humidity: "#10b981",
+    temperature: "#3b82f6",
+  };
+  const stroke = strokeByKey[dataKey] ?? "#3b82f6";
+  const chartData = useMemo(() => {
+    const points = data.filter((item) => typeof item.ts === "number" && typeof item[dataKey] === "number");
+    if (points.length !== 1 || range !== "24h") return points;
+    const center = points[0].ts as number;
+    const value = points[0][dataKey] as number;
+    return [
+      { ...points[0], ts: center - 30 * 60 * 1000, [dataKey]: value },
+      points[0],
+      { ...points[0], ts: center + 30 * 60 * 1000, [dataKey]: value },
+    ];
+  }, [data, dataKey, range]);
+  const xTickFormatter = (value: number | string) => {
+    const ts = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(ts)) return String(value);
+    const d = new Date(ts);
+    return range === "24h"
+      ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleDateString([], { month: "2-digit", day: "2-digit" });
+  };
+
+  const xLabelFormatter = (value: number | string) => {
+    const ts = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(ts)) return String(value);
+    return new Date(ts).toLocaleString();
+  };
+
   return (
     <div className="rounded-sm border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-[#0d1117]">
       <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">
@@ -404,15 +500,39 @@ function MetricChart({
         {unit ? <span className="ml-1 text-[10px] text-gray-500 dark:text-gray-400">({unit})</span> : null}
       </p>
       <div className="mt-2 h-[140px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="t" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-            <YAxis width={28} domain={yDomain} ticks={yTicks} />
-            <Tooltip formatter={tooltipFormatter} />
-            <Line type="monotone" dataKey={dataKey} strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+        {chartData.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-[11px] text-gray-500 dark:text-gray-400">
+            {emptyText}
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 5, right: 8, left: 6, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="ts"
+                type="number"
+                domain={["dataMin", "dataMax"]}
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                stroke="#94a3b8"
+                axisLine={{ stroke: "#94a3b8" }}
+                tickLine={{ stroke: "#94a3b8" }}
+                minTickGap={20}
+                tickFormatter={xTickFormatter}
+              />
+              <YAxis
+                width={38}
+                domain={yDomain}
+                ticks={yTicks}
+                allowDataOverflow
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                axisLine={{ stroke: "#94a3b8" }}
+                tickLine={{ stroke: "#94a3b8" }}
+              />
+              <Tooltip formatter={tooltipFormatter} labelFormatter={xLabelFormatter} />
+              <Line type="monotone" dataKey={dataKey} stroke={stroke} strokeWidth={2} dot={false} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

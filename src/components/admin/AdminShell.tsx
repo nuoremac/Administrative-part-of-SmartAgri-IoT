@@ -328,10 +328,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       <div className="px-3 pb-15">
         <button
           onClick={logout}
-          className="flex w-full items-center gap-2 rounded-md bg-white/70 px-3 py-2 text-left text-xs font-semibold text-green-900 hover:bg-white
-                     dark:bg-[#0d1117] dark:text-gray-100 dark:hover:bg-[#0f172a]"
+          className="flex w-full items-center gap-2 rounded-md bg-red-100 px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-200
+                     dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/35"
         >
-          <span className="text-green-900/80 dark:text-gray-200">
+          <span className="text-red-700 dark:text-red-300">
             <IconLogout />
           </span>
           <span>{t("logout")}</span>

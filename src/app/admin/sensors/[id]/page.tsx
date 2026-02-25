@@ -360,11 +360,25 @@ export default function SensorDetailsPage() {
           {showCharts ? (
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
               <MetricChart title={t("metric_ph")} unit="" dataKey="ph" data={metricsData} yDomain={[0, 14]} yTicks={[0, 7, 14]} />
-              <MetricChart title={t("metric_azote")} unit="mg/kg" dataKey="azote" data={metricsData} />
-              <MetricChart title={t("metric_phosphore")} unit="mg/kg" dataKey="phosphore" data={metricsData} />
-              <MetricChart title={t("metric_potassium")} unit="mg/kg" dataKey="potassium" data={metricsData} />
-              <MetricChart title={t("dashboard_humidity")} unit="%" dataKey="humidity" data={metricsData} />
-              <MetricChart title={t("dashboard_temperature")} unit="°C" dataKey="temperature" data={metricsData} />
+              <MetricChart title={t("metric_azote")} unit="kg/ha" dataKey="azote" data={metricsData} />
+              <MetricChart title={t("metric_phosphore")} unit="kg/ha" dataKey="phosphore" data={metricsData} />
+              <MetricChart title={t("metric_potassium")} unit="kg/ha" dataKey="potassium" data={metricsData} />
+              <MetricChart
+                title={t("dashboard_humidity")}
+                unit="%"
+                dataKey="humidity"
+                data={metricsData}
+                yDomain={[0, 100]}
+                yTicks={[0, 25, 50, 75, 100]}
+              />
+              <MetricChart
+                title={t("dashboard_temperature")}
+                unit="°C"
+                dataKey="temperature"
+                data={metricsData}
+                yDomain={[0, 100]}
+                yTicks={[0, 25, 50, 75, 100]}
+              />
             </div>
           ) : (
             <div className="mt-3 h-[220px] rounded-sm bg-gray-100 dark:bg-[#161b22]" />
@@ -412,8 +426,20 @@ function MetricChart({
   yDomain?: [number, number];
   yTicks?: number[];
 }) {
-  const tooltipFormatter = (value: number | string | undefined) =>
-    `${value ?? "—"}${unit ? ` ${unit}` : ""}`;
+  const tooltipFormatter = (value: number | string | undefined) => {
+    if (value == null || value === "") return `—${unit ? ` ${unit}` : ""}`;
+    if (typeof value === "number") return `${value.toFixed(1)}${unit ? ` ${unit}` : ""}`;
+    return `${value}${unit ? ` ${unit}` : ""}`;
+  };
+  const strokeByKey: Record<string, string> = {
+    ph: "#f59e0b",
+    azote: "#8b5cf6",
+    phosphore: "#14b8a6",
+    potassium: "#ec4899",
+    humidity: "#10b981",
+    temperature: "#3b82f6",
+  };
+  const stroke = strokeByKey[dataKey] ?? "#3b82f6";
   return (
     <div className="rounded-sm border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-[#0d1117]">
       <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">
@@ -422,12 +448,27 @@ function MetricChart({
       </p>
       <div className="mt-2 h-[140px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+          <LineChart data={data} margin={{ top: 5, right: 8, left: 6, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="t" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-            <YAxis width={28} domain={yDomain} ticks={yTicks} />
+            <XAxis
+              dataKey="t"
+              tick={{ fontSize: 10, fill: "#94a3b8" }}
+              stroke="#94a3b8"
+              axisLine={{ stroke: "#94a3b8" }}
+              tickLine={{ stroke: "#94a3b8" }}
+              minTickGap={20}
+            />
+            <YAxis
+              width={38}
+              domain={yDomain}
+              ticks={yTicks}
+              allowDataOverflow
+              tick={{ fontSize: 10, fill: "#94a3b8" }}
+              axisLine={{ stroke: "#94a3b8" }}
+              tickLine={{ stroke: "#94a3b8" }}
+            />
             <Tooltip formatter={tooltipFormatter} />
-            <Line type="monotone" dataKey={dataKey} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey={dataKey} stroke={stroke} strokeWidth={2} dot={false} connectNulls />
           </LineChart>
         </ResponsiveContainer>
       </div>
